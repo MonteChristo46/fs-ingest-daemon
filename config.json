@@ -1,0 +1,5 @@
+{
+  "endpoint": "https://example.com/upload",
+  "max_data_size_gb": 1,
+  "watch_path": "./data"
+}
