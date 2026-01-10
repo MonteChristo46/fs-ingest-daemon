@@ -9,18 +9,40 @@ fi
 
 # Configuration
 ROOT_DIR=${1:-"./data"}
-NUM_CAMS=${2:-5}
-FILES_PER_CAM=${3:-20}
-DELAY=${4:-0} # Set to 0 for max speed (stress test)
+TEST_DATA_DIR=${2:-"./test-data"}
+NUM_CAMS=${3:-5}
+FILES_PER_CAM=${4:-20}
+DELAY=${5:-0} # Set to 0 for max speed (stress test)
 
 echo "------------------------------------------------"
 echo "FS Ingest Daemon - Stress Test Generator"
 echo "------------------------------------------------"
 echo "Target: $ROOT_DIR"
+echo "Source: $TEST_DATA_DIR"
 echo "Cameras: $NUM_CAMS"
 echo "Files/Cam: $FILES_PER_CAM"
 echo "Delay: ${DELAY}s"
 echo "------------------------------------------------"
+
+# Check source images
+if [ ! -d "$TEST_DATA_DIR" ]; then
+    echo "Error: Test data directory '$TEST_DATA_DIR' does not exist."
+    exit 1
+fi
+
+# Load images into array
+shopt -s nullglob
+IMAGES=("$TEST_DATA_DIR"/*)
+shopt -u nullglob
+
+NUM_IMAGES=${#IMAGES[@]}
+
+if [ "$NUM_IMAGES" -eq 0 ]; then
+    echo "Error: No files found in '$TEST_DATA_DIR'."
+    exit 1
+fi
+
+echo "Found $NUM_IMAGES source images."
 
 # Ensure root exists
 mkdir -p "$ROOT_DIR"
@@ -36,13 +58,21 @@ for ((i=1; i<=NUM_CAMS; i++)); do
 
     # Generate files
     for ((j=1; j<=FILES_PER_CAM; j++)); do
-        # Unique filename
-        FILENAME="img_$(date +%s%N)_$j.jpg"
+        # Unique filename (keep extension from source or default to .jpg?)
+        # Let's keep it simple and just use .jpg or .png based on source if possible, 
+        # but the request didn't specify dynamic extensions. 
+        # However, to be safe, let's grab the extension from the source file.
+        
+        # Pick random image
+        RAND_INDEX=$(( RANDOM % NUM_IMAGES ))
+        SOURCE_FILE="${IMAGES[$RAND_INDEX]}"
+        EXTENSION="${SOURCE_FILE##*.}"
+        
+        FILENAME="img_$(date +%s%N)_$j.$EXTENSION"
         FILE_PATH="$CAM_DIR/$FILENAME"
         
-        # Create file with random size between 1KB and 10KB
-        SIZE=$(( ( RANDOM % 9000 ) + 1000 ))
-        head -c $SIZE /dev/urandom > "$FILE_PATH"
+        # Copy file
+        cp "$SOURCE_FILE" "$FILE_PATH"
 
         # Optional: Print progress every 10 files
         if (( j % 10 == 0 )); then

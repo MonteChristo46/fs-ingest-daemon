@@ -7,6 +7,7 @@ import (
 )
 
 type Config struct {
+	DeviceID      string  `json:"device_id"`
 	Endpoint      string  `json:"endpoint"`
 	MaxDataSizeGB float64 `json:"max_data_size_gb"`
 	WatchPath     string  `json:"watch_path"`
@@ -15,7 +16,8 @@ type Config struct {
 func Load(path string) (*Config, error) {
 	// Default config
 	cfg := &Config{
-		Endpoint:      "https://example.com/upload",
+		DeviceID:      "dev-001",
+		Endpoint:      "https://localhost:8080",
 		MaxDataSizeGB: 1.0,
 		WatchPath:     "./data",
 	}
@@ -35,7 +37,7 @@ func Load(path string) (*Config, error) {
 	if err := decoder.Decode(cfg); err != nil {
 		return nil, err
 	}
-	
+
 	// Normalize path
 	if cfg.WatchPath == "./data" || cfg.WatchPath == "" {
 		ex, err := os.Executable()

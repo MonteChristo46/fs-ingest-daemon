@@ -1,7 +1,6 @@
 package watcher
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -62,7 +61,7 @@ func (w *Watcher) AddRecursive(path string) error {
 			return err
 		}
 		if info.IsDir() {
-			fmt.Printf("Watching: %s\n", newPath)
+			log.Printf("Watching: %s\n", newPath)
 			return w.fsWatcher.Add(newPath)
 		}
 		return nil

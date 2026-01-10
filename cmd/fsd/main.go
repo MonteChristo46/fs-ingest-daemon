@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -25,6 +26,60 @@ var (
 	watcherSvc  *watcher.Watcher
 )
 
+// CompositeLogger writes logs to both the system service logger and a file.
+type CompositeLogger struct {
+	svcLogger  service.Logger
+	fileLogger *log.Logger
+}
+
+func (l *CompositeLogger) Error(v ...interface{}) error {
+	l.fileLogger.Println(append([]interface{}{"ERROR:"}, v...)...)
+	if l.svcLogger != nil {
+		return l.svcLogger.Error(v...)
+	}
+	return nil
+}
+
+func (l *CompositeLogger) Warning(v ...interface{}) error {
+	l.fileLogger.Println(append([]interface{}{"WARNING:"}, v...)...)
+	if l.svcLogger != nil {
+		return l.svcLogger.Warning(v...)
+	}
+	return nil
+}
+
+func (l *CompositeLogger) Info(v ...interface{}) error {
+	l.fileLogger.Println(append([]interface{}{"INFO:"}, v...)...)
+	if l.svcLogger != nil {
+		return l.svcLogger.Info(v...)
+	}
+	return nil
+}
+
+func (l *CompositeLogger) Errorf(format string, a ...interface{}) error {
+	l.fileLogger.Printf("ERROR: "+format, a...)
+	if l.svcLogger != nil {
+		return l.svcLogger.Errorf(format, a...)
+	}
+	return nil
+}
+
+func (l *CompositeLogger) Warningf(format string, a ...interface{}) error {
+	l.fileLogger.Printf("WARNING: "+format, a...)
+	if l.svcLogger != nil {
+		return l.svcLogger.Warningf(format, a...)
+	}
+	return nil
+}
+
+func (l *CompositeLogger) Infof(format string, a ...interface{}) error {
+	l.fileLogger.Printf("INFO: "+format, a...)
+	if l.svcLogger != nil {
+		return l.svcLogger.Infof(format, a...)
+	}
+	return nil
+}
+
 type program struct{}
 
 func (p *program) Start(s service.Service) error {
@@ -34,7 +89,7 @@ func (p *program) Start(s service.Service) error {
 		return err
 	}
 	exPath := filepath.Dir(ex)
-	
+
 	cfgPath := filepath.Join(exPath, "config.json")
 	cfg, err = config.Load(cfgPath)
 	if err != nil {
@@ -77,7 +132,7 @@ func (p *program) Start(s service.Service) error {
 		if info.IsDir() {
 			return
 		}
-		
+
 		// Add to Store as PENDING
 		if err := dbStore.AddOrUpdateFile(path, info.Size(), info.ModTime()); err != nil {
 			if logger != nil {
@@ -139,9 +194,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	
+
 	errs := make(chan error, 5)
-	logger, err = s.Logger(errs)
+	sysLogger, err := s.Logger(errs)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -154,6 +209,36 @@ func main() {
 			}
 		}
 	}()
+
+	// Setup File Logger
+	ex, err := os.Executable()
+	if err != nil {
+		log.Fatal(err)
+	}
+	logPath := filepath.Join(filepath.Dir(ex), "fsd.log")
+
+	// Open file for appending, create if not exists
+	logFile, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		// Fallback to stderr if file cannot be opened
+		log.Printf("Failed to open log file: %v\n", err)
+	} else {
+		defer logFile.Close()
+	}
+
+	var fLogger *log.Logger
+	if logFile != nil {
+		fLogger = log.New(logFile, "", log.LstdFlags|log.Lmicroseconds)
+		log.SetOutput(logFile)
+	} else {
+		fLogger = log.New(os.Stderr, "", log.LstdFlags|log.Lmicroseconds)
+	}
+
+	// Initialize the global logger with the composite logger
+	logger = &CompositeLogger{
+		svcLogger:  sysLogger,
+		fileLogger: fLogger,
+	}
 
 	var rootCmd = &cobra.Command{
 		Use:   "fsd",
@@ -222,9 +307,9 @@ func main() {
 			}
 		},
 	}
-	
+
 	var statusCmd = &cobra.Command{
-		Use: "status",
+		Use:   "status",
 		Short: "Show service status",
 		Run: func(cmd *cobra.Command, args []string) {
 			status, err := s.Status()
@@ -246,7 +331,27 @@ func main() {
 		},
 	}
 
-	rootCmd.AddCommand(installCmd, uninstallCmd, startCmd, stopCmd, runCmd, statusCmd)
+	var logsCmd = &cobra.Command{
+		Use:   "logs",
+		Short: "Show service logs",
+		Run: func(cmd *cobra.Command, args []string) {
+			f, err := os.Open(logPath)
+			if err != nil {
+				if os.IsNotExist(err) {
+					fmt.Println("No logs found.")
+					return
+				}
+				fmt.Printf("Error opening log file: %v\n", err)
+				return
+			}
+			defer f.Close()
+			if _, err := io.Copy(os.Stdout, f); err != nil {
+				fmt.Printf("Error reading logs: %v\n", err)
+			}
+		},
+	}
+
+	rootCmd.AddCommand(installCmd, uninstallCmd, startCmd, stopCmd, runCmd, statusCmd, logsCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
