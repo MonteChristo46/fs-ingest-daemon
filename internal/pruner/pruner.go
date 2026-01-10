@@ -1,5 +1,9 @@
 package pruner
 
+// Package pruner implements the disk space management logic.
+// It ensures the directory watched by the daemon does not exceed a configured size limit (MaxDataSizeGB).
+// It deletes files that have been successfully UPLOADED, starting with the least recently modified (LRM).
+
 import (
 	"fmt"
 	"fs-ingest-daemon/internal/config"
@@ -9,12 +13,14 @@ import (
 	"time"
 )
 
+// Pruner manages the file eviction process.
 type Pruner struct {
-	cfg   *config.Config
-	store *store.Store
-	stop  chan struct{}
+	cfg   *config.Config // App configuration
+	store *store.Store   // Reference to the database to find candidates
+	stop  chan struct{}  // Channel to signal shutdown
 }
 
+// NewPruner creates a new Pruner instance.
 func NewPruner(cfg *config.Config, s *store.Store) *Pruner {
 	return &Pruner{
 		cfg:   cfg,
@@ -23,6 +29,7 @@ func NewPruner(cfg *config.Config, s *store.Store) *Pruner {
 	}
 }
 
+// Start runs the pruning logic in a background goroutine, checking every minute.
 func (p *Pruner) Start() {
 	ticker := time.NewTicker(1 * time.Minute)
 	go func() {
@@ -38,13 +45,16 @@ func (p *Pruner) Start() {
 	}()
 }
 
+// Stop signals the background goroutine to stop.
 func (p *Pruner) Stop() {
 	close(p.stop)
 }
 
+// Prune checks the total size of files and evicts old uploaded files if the limit is exceeded.
 func (p *Pruner) Prune() {
 	maxBytes := int64(p.cfg.MaxDataSizeGB * 1024 * 1024 * 1024)
-	
+
+	// Get total tracked size from DB
 	currentSize, err := p.store.GetTotalSize()
 	if err != nil {
 		log.Printf("Pruner: Error getting total size: %v", err)
@@ -52,41 +62,44 @@ func (p *Pruner) Prune() {
 	}
 
 	if currentSize <= maxBytes {
-		return // Nothing to do
+		return // usage is within limits
 	}
 
 	fmt.Printf("Pruner: Current size %d bytes > Max %d bytes. Starting eviction.\n", currentSize, maxBytes)
 
-	// Fetch candidates
+	// Fetch candidates for deletion.
+	// Only files with status='UPLOADED' are eligible.
 	candidates, err := p.store.GetPruneCandidates(50)
 	if err != nil {
 		log.Printf("Pruner: Error fetching candidates: %v", err)
 		return
 	}
 
+	// Backpressure mechanism:
+	// If the disk is full but we have no uploaded files to delete, we are in a critical state.
+	// We cannot delete PENDING files as that would mean data loss.
 	if len(candidates) == 0 {
 		fmt.Println("Pruner: Disk full but no UPLOADED files to delete! Backpressure active.")
 		return
 	}
 
+	// Evict candidates
 	for _, f := range candidates {
-		// Verify size again? No, just delete until we are under
-		// Actually, we should check size after each delete, or just delete the batch.
-		// Let's delete the batch.
-		
+		// Attempt to remove the file from filesystem
 		err := os.Remove(f.Path)
 		if err != nil && !os.IsNotExist(err) {
 			log.Printf("Pruner: Failed to remove file %s: %v", f.Path, err)
 			continue
 		}
 
+		// Remove record from DB
 		if err := p.store.RemoveFile(f.Path); err != nil {
 			log.Printf("Pruner: Failed to remove DB record for %s: %v", f.Path, err)
 		} else {
 			fmt.Printf("Pruned: %s\n", f.Path)
 		}
 
-		// Optimization: Check if we are under limit now?
-		// For simplicity, we just process the batch. Next tick will check again.
+		// Note: We process the whole batch without re-checking size for efficiency.
+		// The next tick will re-evaluate if more pruning is needed.
 	}
 }

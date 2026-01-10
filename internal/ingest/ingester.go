@@ -1,5 +1,9 @@
 package ingest
 
+// Package ingest coordinates the core logic of the daemon.
+// It polls the local store for pending files, coordinates with the API to get upload credentials,
+// performs the file upload, and updates the file status upon completion.
+
 import (
 	"crypto/sha256"
 	"encoding/hex"
@@ -17,13 +21,15 @@ import (
 	"time"
 )
 
+// Ingester manages the file ingestion pipeline.
 type Ingester struct {
-	cfg       *config.Config
-	store     *store.Store
-	apiClient *api.Client
-	stop      chan struct{}
+	cfg       *config.Config // App configuration
+	store     *store.Store   // Local metadata database
+	apiClient *api.Client    // Client for cloud API interaction
+	stop      chan struct{}  // Channel to signal shutdown
 }
 
+// NewIngester creates a new Ingester instance.
 func NewIngester(cfg *config.Config, s *store.Store) *Ingester {
 	return &Ingester{
 		cfg:       cfg,
@@ -33,6 +39,8 @@ func NewIngester(cfg *config.Config, s *store.Store) *Ingester {
 	}
 }
 
+// Start initiates the background polling loop.
+// It checks for pending files every 2 seconds.
 func (i *Ingester) Start() {
 	go func() {
 		// Poll loop
@@ -49,11 +57,14 @@ func (i *Ingester) Start() {
 	}()
 }
 
+// Stop signals the polling loop to exit.
 func (i *Ingester) Stop() {
 	close(i.stop)
 }
 
+// processBatch fetches a batch of PENDING files from the store and triggers their upload.
 func (i *Ingester) processBatch() {
+	// Fetch up to 10 pending files to avoid overwhelming the network/system
 	files, err := i.store.GetPendingFiles(10)
 	if err != nil {
 		log.Printf("Ingester: Error fetching pending files: %v", err)
@@ -65,18 +76,25 @@ func (i *Ingester) processBatch() {
 	}
 }
 
+// upload handles the full lifecycle of a single file upload:
+// 1. Calculate SHA256 checksum.
+// 2. Extract metadata from path.
+// 3. Request ingest URL from API.
+// 4. Upload file content to the provided URL.
+// 5. Confirm success with the API.
+// 6. Mark file as UPLOADED in local store.
 func (i *Ingester) upload(f store.FileRecord) {
-	// 0. Calculate SHA256
+	// 0. Calculate SHA256 for integrity check
 	checksum, err := calculateSHA256(f.Path)
 	if err != nil {
 		log.Printf("Ingester: Failed to calculate checksum for %s: %v", f.Path, err)
 		return
 	}
 
-	// 1. Extract Metadata and Context
+	// 1. Extract Metadata and Context based on directory structure
 	context, meta := util.ExtractMetadata(i.cfg.WatchPath, f.Path)
 
-	// 2. Ingest Request
+	// 2. Ingest Request - Ask API for permission and upload URL
 	req := api.IngestRequest{
 		DeviceID:       i.cfg.DeviceID,
 		Filename:       filepath.Base(f.Path),
@@ -100,7 +118,7 @@ func (i *Ingester) upload(f store.FileRecord) {
 	if err := i.uploadFile(resp.UploadURL, f.Path); err != nil {
 		log.Printf("Ingester: Upload failed for %s: %v", f.Path, err)
 
-		// Report failure to API
+		// Report failure to API so it can handle the failed handshake
 		errMsg := err.Error()
 		failReq := api.ConfirmRequest{
 			HandshakeID:  resp.HandshakeID,
@@ -112,14 +130,12 @@ func (i *Ingester) upload(f store.FileRecord) {
 	}
 	uploadDuration := time.Since(uploadStart)
 
-	// 4. Confirm Success
+	// 4. Confirm Success with API
 	var uploadedPath *string
 	u, err := url.Parse(resp.UploadURL)
 	if err == nil {
 		p := u.Path
-		// Remove leading slash if needed, but usually S3 keys are relative to bucket, or path includes bucket.
-		// Assuming standard S3 URL structure (host/bucket/key or bucket.host/key)
-		// For now we just send the path.
+		// We capture the path component of the upload URL to store/log if needed.
 		uploadedPath = &p
 	}
 
@@ -131,12 +147,12 @@ func (i *Ingester) upload(f store.FileRecord) {
 
 	if err := i.apiClient.Confirm(confirmReq); err != nil {
 		log.Printf("Ingester: Confirm request failed for %s (HandshakeID: %s): %v", f.Path, resp.HandshakeID, err)
-		// Even if confirm fails, we might want to retry?
-		// For now, if confirm fails, we don't mark as uploaded, so it will be retried (duplicate ingest request though).
+		// Note: If confirm fails, we do NOT mark as uploaded locally.
+		// This ensures the file is retried in the next batch.
 		return
 	}
 
-	// 5. Mark as Uploaded
+	// 5. Mark as Uploaded in local DB
 	if err := i.store.MarkUploaded(f.Path); err != nil {
 		log.Printf("Ingester: Failed to mark %s as uploaded: %v", f.Path, err)
 	} else {
@@ -144,6 +160,7 @@ func (i *Ingester) upload(f store.FileRecord) {
 	}
 }
 
+// uploadFile performs a PUT request to upload the file content to the destination URL.
 func (i *Ingester) uploadFile(url, path string) error {
 	file, err := os.Open(path)
 	if err != nil {
@@ -178,6 +195,7 @@ func (i *Ingester) uploadFile(url, path string) error {
 	return nil
 }
 
+// calculateSHA256 computes the SHA256 hash of a file.
 func calculateSHA256(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {

@@ -1,5 +1,9 @@
 package watcher
 
+// Package watcher provides a recursive file system watcher.
+// It uses fsnotify to listen for file creation events and triggers a callback
+// when a new file is detected. It automatically adds subdirectories to the watch list.
+
 import (
 	"log"
 	"os"
@@ -8,12 +12,17 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-// Watcher handles the file system events
+// Watcher handles the file system events using fsnotify.
 type Watcher struct {
 	fsWatcher *fsnotify.Watcher
 }
 
-// NewWatcher creates and initializes a recursive watcher
+// NewWatcher creates and initializes a recursive watcher on the specified root directory.
+//
+// Arguments:
+//
+//	root: The directory path to start watching.
+//	eventCallback: A function to call when a new file is detected.
 func NewWatcher(root string, eventCallback func(string)) (*Watcher, error) {
 	fs, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -32,15 +41,20 @@ func NewWatcher(root string, eventCallback func(string)) (*Watcher, error) {
 				}
 
 				// If a new directory is created, watch it too (Recursive)
+				// We check for fsnotify.Create events.
 				if event.Has(fsnotify.Create) {
 					info, err := os.Stat(event.Name)
 					if err == nil && info.IsDir() {
+						// Add the new directory to the watcher
 						w.AddRecursive(event.Name)
 					} else if err == nil {
 						// It's a file! Trigger the callback (Upload logic)
 						eventCallback(event.Name)
 					}
 				}
+				// Note: In a real-world scenario, you might also want to handle Write events
+				// if files are written slowly, but for atomic moves/copies Create is often sufficient.
+
 			case err, ok := <-fs.Errors:
 				if !ok {
 					return
@@ -54,7 +68,7 @@ func NewWatcher(root string, eventCallback func(string)) (*Watcher, error) {
 	return w, err
 }
 
-// AddRecursive adds a path and all sub-directories to the watcher
+// AddRecursive adds the given path and all its sub-directories to the watcher.
 func (w *Watcher) AddRecursive(path string) error {
 	return filepath.Walk(path, func(newPath string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -68,6 +82,7 @@ func (w *Watcher) AddRecursive(path string) error {
 	})
 }
 
+// Close shuts down the file system watcher.
 func (w *Watcher) Close() {
 	w.fsWatcher.Close()
 }

@@ -1,5 +1,10 @@
 package main
 
+// Package main is the entry point for the fs-ingest-daemon.
+// It handles the service lifecycle (install, start, stop) using the kardianos/service package,
+// initializes all internal components (config, store, pruner, ingester, watcher),
+// and provides the CLI interface using Cobra.
+
 import (
 	"fmt"
 	"io"
@@ -9,6 +14,7 @@ import (
 
 	"fs-ingest-daemon/internal/config"
 	"fs-ingest-daemon/internal/ingest"
+	fsdlog "fs-ingest-daemon/internal/logger"
 	"fs-ingest-daemon/internal/pruner"
 	"fs-ingest-daemon/internal/store"
 	"fs-ingest-daemon/internal/watcher"
@@ -26,64 +32,16 @@ var (
 	watcherSvc  *watcher.Watcher
 )
 
-// CompositeLogger writes logs to both the system service logger and a file.
-type CompositeLogger struct {
-	svcLogger  service.Logger
-	fileLogger *log.Logger
-}
-
-func (l *CompositeLogger) Error(v ...interface{}) error {
-	l.fileLogger.Println(append([]interface{}{"ERROR:"}, v...)...)
-	if l.svcLogger != nil {
-		return l.svcLogger.Error(v...)
-	}
-	return nil
-}
-
-func (l *CompositeLogger) Warning(v ...interface{}) error {
-	l.fileLogger.Println(append([]interface{}{"WARNING:"}, v...)...)
-	if l.svcLogger != nil {
-		return l.svcLogger.Warning(v...)
-	}
-	return nil
-}
-
-func (l *CompositeLogger) Info(v ...interface{}) error {
-	l.fileLogger.Println(append([]interface{}{"INFO:"}, v...)...)
-	if l.svcLogger != nil {
-		return l.svcLogger.Info(v...)
-	}
-	return nil
-}
-
-func (l *CompositeLogger) Errorf(format string, a ...interface{}) error {
-	l.fileLogger.Printf("ERROR: "+format, a...)
-	if l.svcLogger != nil {
-		return l.svcLogger.Errorf(format, a...)
-	}
-	return nil
-}
-
-func (l *CompositeLogger) Warningf(format string, a ...interface{}) error {
-	l.fileLogger.Printf("WARNING: "+format, a...)
-	if l.svcLogger != nil {
-		return l.svcLogger.Warningf(format, a...)
-	}
-	return nil
-}
-
-func (l *CompositeLogger) Infof(format string, a ...interface{}) error {
-	l.fileLogger.Printf("INFO: "+format, a...)
-	if l.svcLogger != nil {
-		return l.svcLogger.Infof(format, a...)
-	}
-	return nil
-}
-
+// program implements the service.Interface required by kardianos/service.
+// It acts as the controller for the daemon's lifecycle events.
 type program struct{}
 
+// Start is called when the service is started.
+// It initializes the configuration, database, and background workers (Pruner, Ingester, Watcher).
+// This method must not block; the actual work is done in background goroutines started by the components.
 func (p *program) Start(s service.Service) error {
 	// 1. Load Config
+	// We determine the executable path to locate config.json relative to the binary.
 	ex, err := os.Executable()
 	if err != nil {
 		return err
@@ -102,6 +60,7 @@ func (p *program) Start(s service.Service) error {
 	}
 
 	// 2. Initialize Store
+	// The SQLite database is stored alongside the executable.
 	dbPath := filepath.Join(exPath, "fsd.db")
 	dbStore, err = store.NewStore(dbPath)
 	if err != nil {
@@ -109,18 +68,22 @@ func (p *program) Start(s service.Service) error {
 	}
 
 	// 3. Start Pruner
+	// The pruner runs in the background and cleans up old uploaded files.
 	prunerSvc = pruner.NewPruner(cfg, dbStore)
 	prunerSvc.Start()
 
 	// 4. Start Ingester
+	// The ingester watches the DB for pending files and uploads them.
 	ingesterSvc = ingest.NewIngester(cfg, dbStore)
 	ingesterSvc.Start()
 
 	// 5. Start Watcher
+	// Ensure the watch directory exists before starting the watcher.
 	if err := os.MkdirAll(cfg.WatchPath, 0755); err != nil {
 		return fmt.Errorf("failed to create watch dir: %v", err)
 	}
 
+	// onNewFile is the callback triggered by the watcher when a new file is detected.
 	onNewFile := func(path string) {
 		info, err := os.Stat(path)
 		if err != nil {
@@ -133,7 +96,8 @@ func (p *program) Start(s service.Service) error {
 			return
 		}
 
-		// Add to Store as PENDING
+		// Add the detected file to the Store with status PENDING.
+		// If the file is already tracked, this might update its metadata.
 		if err := dbStore.AddOrUpdateFile(path, info.Size(), info.ModTime()); err != nil {
 			if logger != nil {
 				logger.Error(fmt.Errorf("db error: %v", err))
@@ -145,6 +109,7 @@ func (p *program) Start(s service.Service) error {
 		}
 	}
 
+	// Initialize the recursive file system watcher.
 	watcherSvc, err = watcher.NewWatcher(cfg.WatchPath, onNewFile)
 	if err != nil {
 		return fmt.Errorf("failed to start watcher: %v", err)
@@ -159,6 +124,8 @@ func (p *program) Start(s service.Service) error {
 	return nil
 }
 
+// Stop is called when the service is being stopped.
+// It gracefully shuts down all active components and closes database connections.
 func (p *program) Stop(s service.Service) error {
 	if logger != nil {
 		logger.Info("Stopping FS Ingest Daemon...")
@@ -178,6 +145,7 @@ func (p *program) Stop(s service.Service) error {
 	return nil
 }
 
+// main configures the service meta-data and sets up the Cobra CLI commands.
 func main() {
 	svcConfig := &service.Config{
 		Name:        "fs-ingest-daemon",
@@ -185,7 +153,7 @@ func main() {
 		Description: "Watches directories and uploads files to the cloud.",
 		Arguments:   []string{"run"},
 		Option: service.KeyValue{
-			"UserService": true,
+			"UserService": true, // Run as a user-level service where applicable
 		},
 	}
 
@@ -195,12 +163,14 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Setup the system logger (event log / syslog)
 	errs := make(chan error, 5)
 	sysLogger, err := s.Logger(errs)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	// Goroutine to handle logger errors
 	go func() {
 		for {
 			err := <-errs
@@ -210,7 +180,7 @@ func main() {
 		}
 	}()
 
-	// Setup File Logger
+	// Setup File Logger to write logs to a local file
 	ex, err := os.Executable()
 	if err != nil {
 		log.Fatal(err)
@@ -226,6 +196,7 @@ func main() {
 		defer logFile.Close()
 	}
 
+	// Create the standard go logger for the file
 	var fLogger *log.Logger
 	if logFile != nil {
 		fLogger = log.New(logFile, "", log.LstdFlags|log.Lmicroseconds)
@@ -234,11 +205,10 @@ func main() {
 		fLogger = log.New(os.Stderr, "", log.LstdFlags|log.Lmicroseconds)
 	}
 
-	// Initialize the global logger with the composite logger
-	logger = &CompositeLogger{
-		svcLogger:  sysLogger,
-		fileLogger: fLogger,
-	}
+	// Initialize the global logger with the composite logger (System + File)
+	logger = fsdlog.New(sysLogger, fLogger)
+
+	// --- CLI Commands Setup ---
 
 	var rootCmd = &cobra.Command{
 		Use:   "fsd",

@@ -1,5 +1,9 @@
 package store
 
+// Package store handles all database interactions using SQLite.
+// It manages the state of files (PENDING vs UPLOADED) and tracks file metadata (size, mod_time).
+// This persistence layer ensures the daemon is resilient to restarts.
+
 import (
 	"database/sql"
 	"time"
@@ -7,13 +11,15 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// FileStatus represents the processing state of a file.
 type FileStatus string
 
 const (
-	StatusPending  FileStatus = "PENDING"
-	StatusUploaded FileStatus = "UPLOADED"
+	StatusPending  FileStatus = "PENDING"  // File detected but not yet successfully uploaded
+	StatusUploaded FileStatus = "UPLOADED" // File confirmed uploaded
 )
 
+// FileRecord represents a row in the 'files' table.
 type FileRecord struct {
 	ID         int64
 	Path       string
@@ -23,10 +29,12 @@ type FileRecord struct {
 	UploadedAt sql.NullTime
 }
 
+// Store wraps the SQL database connection.
 type Store struct {
 	db *sql.DB
 }
 
+// NewStore initializes the SQLite database connection and runs migrations.
 func NewStore(dbPath string) (*Store, error) {
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
@@ -41,10 +49,12 @@ func NewStore(dbPath string) (*Store, error) {
 	return s, nil
 }
 
+// Close closes the database connection.
 func (s *Store) Close() error {
 	return s.db.Close()
 }
 
+// migrate creates the necessary tables and indexes if they don't exist.
 func (s *Store) migrate() error {
 	query := `
 	CREATE TABLE IF NOT EXISTS files (
@@ -61,9 +71,10 @@ func (s *Store) migrate() error {
 	return err
 }
 
+// AddOrUpdateFile inserts a new file or updates an existing one.
+// If the file already exists, it updates size/mod_time and resets status to PENDING
+// to ensure modified files are re-uploaded.
 func (s *Store) AddOrUpdateFile(path string, size int64, modTime time.Time) error {
-	// If file exists, update size/mod_time and reset status to PENDING if it changed?
-	// For now, assume if we detect it again (write), we re-queue it.
 	query := `
 	INSERT INTO files (path, size, mod_time, status)
 	VALUES (?, ?, ?, ?)
@@ -76,6 +87,7 @@ func (s *Store) AddOrUpdateFile(path string, size int64, modTime time.Time) erro
 	return err
 }
 
+// MarkUploaded updates the status of a file to UPLOADED and sets the uploaded_at timestamp.
 func (s *Store) MarkUploaded(path string) error {
 	query := `
 	UPDATE files 
@@ -86,6 +98,7 @@ func (s *Store) MarkUploaded(path string) error {
 	return err
 }
 
+// GetTotalSize returns the sum of the size of all tracked files.
 func (s *Store) GetTotalSize() (int64, error) {
 	query := `SELECT COALESCE(SUM(size), 0) FROM files`
 	var size int64
@@ -93,6 +106,8 @@ func (s *Store) GetTotalSize() (int64, error) {
 	return size, err
 }
 
+// GetPruneCandidates returns a list of files that are safe to delete (Status=UPLOADED).
+// Files are returned in order of Modification Time (oldest first).
 func (s *Store) GetPruneCandidates(limit int) ([]FileRecord, error) {
 	query := `
 	SELECT id, path, size, mod_time, status, uploaded_at
@@ -119,12 +134,14 @@ func (s *Store) GetPruneCandidates(limit int) ([]FileRecord, error) {
 	return candidates, nil
 }
 
+// RemoveFile deletes a file record from the database.
 func (s *Store) RemoveFile(path string) error {
 	query := `DELETE FROM files WHERE path = ?`
 	_, err := s.db.Exec(query, path)
 	return err
 }
 
+// GetPendingFiles returns a list of files waiting to be uploaded.
 func (s *Store) GetPendingFiles(limit int) ([]FileRecord, error) {
 	query := `
 	SELECT id, path, size, mod_time, status, uploaded_at
