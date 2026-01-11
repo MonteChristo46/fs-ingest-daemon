@@ -30,7 +30,7 @@ The daemon operates with four main concurrent components:
 
 ### Prerequisites
 
-*   Go 1.21 or higher (for building from source)
+*   Go 1.24 or higher (for building from source)
 
 ### Building the Binary
 
@@ -99,7 +99,7 @@ sudo ./fsd uninstall
 ## Project Structure
 
 *   `cmd/fsd`: Main entry point and CLI implementation.
-*   `internal/api`: HTTP client for the Ingestion API.
+*   `internal/api`: HTTP client and data models for the Ingestion API.
 *   `internal/config`: Configuration loading and management.
 *   `internal/ingest`: Core ingestion logic (Handshake -> Upload -> Confirm).
 *   `internal/pruner`: Disk space management and file eviction logic.
