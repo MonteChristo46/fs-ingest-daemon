@@ -1,80 +1,117 @@
 package logger
 
-// Package logger provides a unified logging interface for the daemon.
-// It wraps the system service logger (provided by kardianos/service) and a standard file logger.
-// This ensures logs are captured both in the OS service manager (e.g., Event Viewer, Syslog)
-// and in a local text file for easy debugging.
-
 import (
-	"log"
+	"bytes"
+	"context"
+	"io"
+	"log/slog"
+	"strings"
 
 	"github.com/kardianos/service"
+	slogmulti "github.com/samber/slog-multi"
 )
 
-// CompositeLogger writes logs to both the system service logger and a file.
-type CompositeLogger struct {
-	svcLogger  service.Logger // The OS service logger
-	fileLogger *log.Logger    // The local file logger
+// Setup configures the global slog.Logger to write to both the service logger and the specified file.
+func Setup(svc service.Logger, logFile io.Writer) *slog.Logger {
+	// File Handler: Text format for readability in the local log file.
+	fileHandler := slog.NewTextHandler(logFile, nil)
+
+	// Service Handler: Adapts slog to kardianos/service logger.
+	svcHandler := &ServiceHandler{svc: svc}
+
+	// Fanout: Send logs to both handlers.
+	fanout := slogmulti.Fanout(fileHandler, svcHandler)
+
+	// Create Logger
+	logger := slog.New(fanout)
+
+	// Set as global default so slog.Info() works out of the box if needed.
+	slog.SetDefault(logger)
+
+	return logger
 }
 
-// New creates a new instance of CompositeLogger.
-func New(svcLogger service.Logger, fileLogger *log.Logger) *CompositeLogger {
-	return &CompositeLogger{
-		svcLogger:  svcLogger,
-		fileLogger: fileLogger,
+// ServiceHandler adapts slog.Handler to service.Logger.
+// It formats the log record (message + attributes) into a string and passes it to the underlying service logger.
+type ServiceHandler struct {
+	svc    service.Logger
+	attrs  []slog.Attr
+	groups []string
+}
+
+// Enabled always returns true as the service logger's filtering is managed by the OS or the service wrapper.
+func (h *ServiceHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return true
+}
+
+// Handle formats the record and writes it to the service logger.
+func (h *ServiceHandler) Handle(ctx context.Context, r slog.Record) error {
+	if h.svc == nil {
+		return nil
+	}
+
+	var buf bytes.Buffer
+	// Use a temporary TextHandler to format the record attributes into a string.
+	// We strip Time and Level because the service logger (event log/syslog) usually adds these.
+	th := slog.NewTextHandler(&buf, &slog.HandlerOptions{
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey || a.Key == slog.LevelKey {
+				return slog.Attr{}
+			}
+			return a
+		},
+	})
+
+	// Replay accumulated state (groups and attributes) onto the temporary handler.
+	var handler slog.Handler = th
+	for _, g := range h.groups {
+		handler = handler.WithGroup(g)
+	}
+	handler = handler.WithAttrs(h.attrs)
+
+	// Format the current record.
+	if err := handler.Handle(ctx, r); err != nil {
+		return err
+	}
+
+	// The buffer now contains the formatted log entry (e.g., "msg=... key=val ...\n").
+	msg := strings.TrimSpace(buf.String())
+
+	// Dispatch to the appropriate service logger method based on level.
+	switch r.Level {
+	case slog.LevelError:
+		return h.svc.Error(msg)
+	case slog.LevelWarn:
+		return h.svc.Warning(msg)
+	case slog.LevelInfo:
+		return h.svc.Info(msg)
+	default:
+		return h.svc.Info(msg)
 	}
 }
 
-// Error writes an error message to both loggers.
-func (l *CompositeLogger) Error(v ...interface{}) error {
-	l.fileLogger.Println(append([]interface{}{"ERROR:"}, v...)...)
-	if l.svcLogger != nil {
-		return l.svcLogger.Error(v...)
+// WithAttrs returns a new ServiceHandler with the given attributes appended.
+func (h *ServiceHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	newAttrs := make([]slog.Attr, len(h.attrs)+len(attrs))
+	copy(newAttrs, h.attrs)
+	copy(newAttrs[len(h.attrs):], attrs)
+
+	return &ServiceHandler{
+		svc:    h.svc,
+		attrs:  newAttrs,
+		groups: h.groups,
 	}
-	return nil
 }
 
-// Warning writes a warning message to both loggers.
-func (l *CompositeLogger) Warning(v ...interface{}) error {
-	l.fileLogger.Println(append([]interface{}{"WARNING:"}, v...)...)
-	if l.svcLogger != nil {
-		return l.svcLogger.Warning(v...)
-	}
-	return nil
-}
+// WithGroup returns a new ServiceHandler with the given group appended.
+func (h *ServiceHandler) WithGroup(name string) slog.Handler {
+	newGroups := make([]string, len(h.groups)+1)
+	copy(newGroups, h.groups)
+	newGroups[len(h.groups)] = name
 
-// Info writes an info message to both loggers.
-func (l *CompositeLogger) Info(v ...interface{}) error {
-	l.fileLogger.Println(append([]interface{}{"INFO:"}, v...)...)
-	if l.svcLogger != nil {
-		return l.svcLogger.Info(v...)
+	return &ServiceHandler{
+		svc:    h.svc,
+		attrs:  h.attrs,
+		groups: newGroups,
 	}
-	return nil
-}
-
-// Errorf writes a formatted error message to both loggers.
-func (l *CompositeLogger) Errorf(format string, a ...interface{}) error {
-	l.fileLogger.Printf("ERROR: "+format, a...)
-	if l.svcLogger != nil {
-		return l.svcLogger.Errorf(format, a...)
-	}
-	return nil
-}
-
-// Warningf writes a formatted warning message to both loggers.
-func (l *CompositeLogger) Warningf(format string, a ...interface{}) error {
-	l.fileLogger.Printf("WARNING: "+format, a...)
-	if l.svcLogger != nil {
-		return l.svcLogger.Warningf(format, a...)
-	}
-	return nil
-}
-
-// Infof writes a formatted info message to both loggers.
-func (l *CompositeLogger) Infof(format string, a ...interface{}) error {
-	l.fileLogger.Printf("INFO: "+format, a...)
-	if l.svcLogger != nil {
-		return l.svcLogger.Infof(format, a...)
-	}
-	return nil
 }

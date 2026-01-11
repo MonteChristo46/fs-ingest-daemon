@@ -13,7 +13,7 @@ import (
 	"fs-ingest-daemon/internal/store"
 	"fs-ingest-daemon/internal/util"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -26,15 +26,17 @@ type Ingester struct {
 	cfg       *config.Config // App configuration
 	store     *store.Store   // Local metadata database
 	apiClient *api.Client    // Client for cloud API interaction
+	logger    *slog.Logger   // Structured logger
 	stop      chan struct{}  // Channel to signal shutdown
 }
 
 // NewIngester creates a new Ingester instance.
-func NewIngester(cfg *config.Config, s *store.Store) *Ingester {
+func NewIngester(cfg *config.Config, s *store.Store, logger *slog.Logger) *Ingester {
 	return &Ingester{
 		cfg:       cfg,
 		store:     s,
 		apiClient: api.NewClient(cfg.Endpoint),
+		logger:    logger,
 		stop:      make(chan struct{}),
 	}
 }
@@ -67,7 +69,7 @@ func (i *Ingester) processBatch() {
 	// Fetch up to 10 pending files to avoid overwhelming the network/system
 	files, err := i.store.GetPendingFiles(10)
 	if err != nil {
-		log.Printf("Ingester: Error fetching pending files: %v", err)
+		i.logger.Error("Ingester: Error fetching pending files", "error", err)
 		return
 	}
 
@@ -87,7 +89,7 @@ func (i *Ingester) upload(f store.FileRecord) {
 	// 0. Calculate SHA256 for integrity check
 	checksum, err := calculateSHA256(f.Path)
 	if err != nil {
-		log.Printf("Ingester: Failed to calculate checksum for %s: %v", f.Path, err)
+		i.logger.Error("Ingester: Failed to calculate checksum", "path", f.Path, "error", err)
 		return
 	}
 
@@ -107,16 +109,16 @@ func (i *Ingester) upload(f store.FileRecord) {
 
 	resp, err := i.apiClient.Ingest(req)
 	if err != nil {
-		log.Printf("Ingester: Ingest request failed for %s: %v", f.Path, err)
+		i.logger.Error("Ingester: Ingest request failed", "path", f.Path, "error", err)
 		return
 	}
 
 	// 3. Upload to Presigned URL
-	log.Printf("[UPLOAD] Start: %s (Size: %d) -> UploadURL: %s", f.Path, f.Size, resp.UploadURL)
+	i.logger.Info("Starting upload", "path", f.Path, "size", f.Size, "upload_url", resp.UploadURL)
 
 	uploadStart := time.Now()
 	if err := i.uploadFile(resp.UploadURL, f.Path); err != nil {
-		log.Printf("Ingester: Upload failed for %s: %v", f.Path, err)
+		i.logger.Error("Ingester: Upload failed", "path", f.Path, "error", err)
 
 		// Report failure to API so it can handle the failed handshake
 		errMsg := err.Error()
@@ -146,7 +148,7 @@ func (i *Ingester) upload(f store.FileRecord) {
 	}
 
 	if err := i.apiClient.Confirm(confirmReq); err != nil {
-		log.Printf("Ingester: Confirm request failed for %s (HandshakeID: %s): %v", f.Path, resp.HandshakeID, err)
+		i.logger.Error("Ingester: Confirm request failed", "path", f.Path, "handshake_id", resp.HandshakeID, "error", err)
 		// Note: If confirm fails, we do NOT mark as uploaded locally.
 		// This ensures the file is retried in the next batch.
 		return
@@ -154,9 +156,9 @@ func (i *Ingester) upload(f store.FileRecord) {
 
 	// 5. Mark as Uploaded in local DB
 	if err := i.store.MarkUploaded(f.Path); err != nil {
-		log.Printf("Ingester: Failed to mark %s as uploaded: %v", f.Path, err)
+		i.logger.Error("Ingester: Failed to mark as uploaded", "path", f.Path, "error", err)
 	} else {
-		log.Printf("[UPLOAD] Success: %s (took %s)", f.Path, uploadDuration)
+		i.logger.Info("Upload success", "path", f.Path, "duration", uploadDuration)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -24,7 +25,7 @@ import (
 )
 
 var (
-	logger      service.Logger
+	logger      *slog.Logger
 	cfg         *config.Config
 	dbStore     *store.Store
 	prunerSvc   *pruner.Pruner
@@ -47,8 +48,8 @@ func (p *program) Start(s service.Service) error {
 		return err
 	}
 	exPath := filepath.Dir(ex)
-
 	cfgPath := filepath.Join(exPath, "config.json")
+
 	cfg, err = config.Load(cfgPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %v", err)
@@ -69,12 +70,12 @@ func (p *program) Start(s service.Service) error {
 
 	// 3. Start Pruner
 	// The pruner runs in the background and cleans up old uploaded files.
-	prunerSvc = pruner.NewPruner(cfg, dbStore)
+	prunerSvc = pruner.NewPruner(cfg, dbStore, logger)
 	prunerSvc.Start()
 
 	// 4. Start Ingester
 	// The ingester watches the DB for pending files and uploads them.
-	ingesterSvc = ingest.NewIngester(cfg, dbStore)
+	ingesterSvc = ingest.NewIngester(cfg, dbStore, logger)
 	ingesterSvc.Start()
 
 	// 5. Start Watcher
@@ -88,7 +89,7 @@ func (p *program) Start(s service.Service) error {
 		info, err := os.Stat(path)
 		if err != nil {
 			if logger != nil {
-				logger.Error(fmt.Errorf("stat error: %v", err))
+				logger.Error("stat error", "error", err)
 			}
 			return
 		}
@@ -100,25 +101,24 @@ func (p *program) Start(s service.Service) error {
 		// If the file is already tracked, this might update its metadata.
 		if err := dbStore.AddOrUpdateFile(path, info.Size(), info.ModTime()); err != nil {
 			if logger != nil {
-				logger.Error(fmt.Errorf("db error: %v", err))
+				logger.Error("db error", "error", err)
 			}
 		} else {
 			if logger != nil {
-				logger.Info("Detected: " + path)
+				logger.Info("Detected", "path", path)
 			}
 		}
 	}
 
 	// Initialize the recursive file system watcher.
-	watcherSvc, err = watcher.NewWatcher(cfg.WatchPath, onNewFile)
+	watcherSvc, err = watcher.NewWatcher(cfg.WatchPath, onNewFile, logger)
 	if err != nil {
 		return fmt.Errorf("failed to start watcher: %v", err)
 	}
 
 	if logger != nil {
 		logger.Info("FS Ingest Daemon Started")
-		logger.Info(fmt.Sprintf("Watching: %s", cfg.WatchPath))
-		logger.Info(fmt.Sprintf("Endpoint: %s", cfg.Endpoint))
+		logger.Info("Configuration", "watch_path", cfg.WatchPath, "endpoint", cfg.Endpoint)
 	}
 
 	return nil
@@ -192,21 +192,20 @@ func main() {
 	if err != nil {
 		// Fallback to stderr if file cannot be opened
 		log.Printf("Failed to open log file: %v\n", err)
+		// We still proceed, but logFile is nil, need to handle that in fsdlog.Setup?
+		// fsdlog.Setup takes io.Writer. If logFile is nil, we can pass os.Stderr.
 	} else {
 		defer logFile.Close()
 	}
 
-	// Create the standard go logger for the file
-	var fLogger *log.Logger
-	if logFile != nil {
-		fLogger = log.New(logFile, "", log.LstdFlags|log.Lmicroseconds)
-		log.SetOutput(logFile)
-	} else {
-		fLogger = log.New(os.Stderr, "", log.LstdFlags|log.Lmicroseconds)
+	var logWriter io.Writer = logFile
+	if logFile == nil {
+		logWriter = os.Stderr
 	}
 
 	// Initialize the global logger with the composite logger (System + File)
-	logger = fsdlog.New(sysLogger, fLogger)
+	// We use the new slog setup.
+	logger = fsdlog.Setup(sysLogger, logWriter)
 
 	// --- CLI Commands Setup ---
 
@@ -273,7 +272,7 @@ func main() {
 		Run: func(cmd *cobra.Command, args []string) {
 			err := s.Run()
 			if err != nil {
-				logger.Error(err)
+				logger.Error("Run error", "error", err)
 			}
 		},
 	}
