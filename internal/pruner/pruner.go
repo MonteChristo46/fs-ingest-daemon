@@ -30,9 +30,15 @@ func NewPruner(cfg *config.Config, s *store.Store, logger *slog.Logger) *Pruner 
 	}
 }
 
-// Start runs the pruning logic in a background goroutine, checking every minute.
+// Start runs the pruning logic in a background goroutine, checking based on config interval.
 func (p *Pruner) Start() {
-	ticker := time.NewTicker(1 * time.Minute)
+	interval, err := time.ParseDuration(p.cfg.PruneCheckInterval)
+	if err != nil {
+		interval = 1 * time.Minute
+		p.logger.Error("Invalid prune check interval, defaulting to 1m", "error", err)
+	}
+
+	ticker := time.NewTicker(interval)
 	go func() {
 		for {
 			select {
@@ -70,7 +76,7 @@ func (p *Pruner) Prune() {
 
 	// Fetch candidates for deletion.
 	// Only files with status='UPLOADED' are eligible.
-	candidates, err := p.store.GetPruneCandidates(50)
+	candidates, err := p.store.GetPruneCandidates(p.cfg.PruneBatchSize)
 	if err != nil {
 		p.logger.Error("Pruner: Error fetching candidates", "error", err)
 		return

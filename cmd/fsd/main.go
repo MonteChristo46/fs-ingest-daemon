@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"fs-ingest-daemon/internal/cli"
+	"fs-ingest-daemon/internal/config"
 	"fs-ingest-daemon/internal/daemon"
 	fsdlog "fs-ingest-daemon/internal/logger"
 
@@ -15,6 +16,20 @@ import (
 )
 
 func main() {
+	// 1. Load Config early to get LogPath
+	ex, err := os.Executable()
+	if err != nil {
+		log.Fatal(err)
+	}
+	cfgPath := filepath.Join(filepath.Dir(ex), "config.json")
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		// If config fails to load, we'll try to proceed with defaults or log to stderr later
+		log.Printf("Warning: Failed to load config early: %v\n", err)
+		// We can't really do much else if we want to respect the user's log path preference,
+		// but defaults in Load() should handle it if file is missing.
+	}
+
 	svcConfig := &service.Config{
 		Name:        "fs-ingest-daemon",
 		DisplayName: "FS Ingest Daemon",
@@ -26,7 +41,10 @@ func main() {
 	}
 
 	// Create the daemon instance (implements service.Interface)
-	dmn := &daemon.Daemon{}
+	// Pass the pre-loaded config
+	dmn := &daemon.Daemon{
+		Cfg: cfg,
+	}
 
 	s, err := service.New(dmn, svcConfig)
 	if err != nil {
@@ -49,11 +67,11 @@ func main() {
 		}
 	}()
 
-	ex, err := os.Executable()
-	if err != nil {
-		log.Fatal(err)
+	// Use LogPath from config
+	logPath := cfg.LogPath
+	if logPath == "" {
+		logPath = filepath.Join(filepath.Dir(ex), "fsd.log")
 	}
-	logPath := filepath.Join(filepath.Dir(ex), "fsd.log")
 
 	// Open file for appending, create if not exists
 	logFile, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)

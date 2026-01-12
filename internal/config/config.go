@@ -7,14 +7,23 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Config represents the application configuration structure.
 type Config struct {
-	DeviceID      string  `json:"device_id"`        // Unique identifier for the device (e.g., "dev-001")
-	Endpoint      string  `json:"endpoint"`         // The API base URL
-	MaxDataSizeGB float64 `json:"max_data_size_gb"` // Maximum allowed size for the local storage in GB before pruning kicks in
-	WatchPath     string  `json:"watch_path"`       // The local directory path to watch for new files
+	DeviceID            string  `json:"device_id"`             // Unique identifier for the device (e.g., "dev-001")
+	Endpoint            string  `json:"endpoint"`              // The API base URL
+	MaxDataSizeGB       float64 `json:"max_data_size_gb"`      // Maximum allowed size for the local storage in GB before pruning kicks in
+	WatchPath           string  `json:"watch_path"`            // The local directory path to watch for new files
+	LogPath             string  `json:"log_path"`              // Path to the log file
+	DBPath              string  `json:"db_path"`               // Path to the SQLite database
+	IngestCheckInterval string  `json:"ingest_check_interval"` // Duration string (e.g. "2s") for ingest polling
+	IngestBatchSize     int     `json:"ingest_batch_size"`     // Number of files to process per ingest tick
+	PruneCheckInterval  string  `json:"prune_check_interval"`  // Duration string (e.g. "1m") for prune checks
+	PruneBatchSize      int     `json:"prune_batch_size"`      // Number of files to prune per tick
+	APITimeout          string  `json:"api_timeout"`           // HTTP Client timeout duration string
+	DebounceDuration    string  `json:"debounce_duration"`     // Duration string (e.g. "500ms") for watcher debounce
 }
 
 // Load reads the configuration from the specified path.
@@ -22,10 +31,18 @@ type Config struct {
 func Load(path string) (*Config, error) {
 	// Initialize with sensible defaults
 	cfg := &Config{
-		DeviceID:      "dev-001",
-		Endpoint:      "https://localhost:8080",
-		MaxDataSizeGB: 1.0,
-		WatchPath:     "./data",
+		DeviceID:            "dev-001",
+		Endpoint:            "https://localhost:8080",
+		MaxDataSizeGB:       1.0,
+		WatchPath:           "./data",
+		LogPath:             "./fsd.log",
+		DBPath:              "./fsd.db",
+		IngestCheckInterval: "2s",
+		IngestBatchSize:     10,
+		PruneCheckInterval:  "1m",
+		PruneBatchSize:      50,
+		APITimeout:          "30s",
+		DebounceDuration:    "500ms",
 	}
 
 	f, err := os.Open(path)
@@ -44,14 +61,29 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
-	// Normalize WatchPath:
-	// If it is the default relative path "./data" or empty, resolve it relative to the executable.
-	if cfg.WatchPath == "./data" || cfg.WatchPath == "" {
-		ex, err := os.Executable()
-		if err == nil {
-			cfg.WatchPath = filepath.Join(filepath.Dir(ex), "data")
+	// Helper to resolve relative paths against executable directory
+	resolvePath := func(p string) string {
+		if p == "" {
+			return p
 		}
+		if !filepath.IsAbs(p) && (strings.HasPrefix(p, "./") || !strings.HasPrefix(p, "/")) { // simplistic check
+			ex, err := os.Executable()
+			if err == nil {
+				return filepath.Join(filepath.Dir(ex), p)
+			}
+		}
+		return p
 	}
+
+	// Normalize Paths if they are defaults or relative
+	if cfg.WatchPath == "./data" {
+		cfg.WatchPath = resolvePath("data")
+	} else {
+		cfg.WatchPath = resolvePath(cfg.WatchPath)
+	}
+
+	cfg.LogPath = resolvePath(cfg.LogPath)
+	cfg.DBPath = resolvePath(cfg.DBPath)
 
 	return cfg, nil
 }

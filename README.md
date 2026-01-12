@@ -40,22 +40,40 @@ go build -o fsd cmd/fsd/main.go
 
 ### Configuration
 
-On the first run, the daemon generates a `config.json` file in the same directory as the binary. You can also create it manually:
+On the first run, the daemon generates a `config.json` file in the same directory as the binary. You can also create it manually.
 
-**config.json**
+**Default `config.json`:**
 ```json
 {
   "device_id": "dev-001",
-  "endpoint": "http://localhost:8080",
-  "max_data_size_gb": 1.0,
-  "watch_path": "./data"
+  "endpoint": "http://localhost:8000",
+  "max_data_size_gb": 1,
+  "watch_path": "./data",
+  "log_path": "./fsd.log",
+  "db_path": "./fsd.db",
+  "ingest_check_interval": "2s",
+  "ingest_batch_size": 10,
+  "prune_check_interval": "1m",
+  "prune_batch_size": 50,
+  "api_timeout": "30s"
 }
 ```
 
-*   **device_id**: Unique identifier for this edge device.
-*   **endpoint**: The base URL of the Glitch Hunt Ingestion API.
-*   **max_data_size_gb**: Maximum allowed size for the watched directory before pruning kicks in.
-*   **watch_path**: The local directory to watch for incoming files.
+**Parameters:**
+
+| Parameter | Description | Default |
+| :--- | :--- | :--- |
+| `device_id` | Unique identifier for this edge device used in API requests. | `"dev-001"` |
+| `endpoint` | Base URL of the Ingestion API. | `"http://localhost:8080"` |
+| `watch_path` | Local directory to recursively watch for new files. | `"./data"` |
+| `max_data_size_gb` | Disk usage threshold (GB) for the `watch_path`. Pruning triggers if exceeded. | `1.0` |
+| `log_path` | Path to the application log file. | `"./fsd.log"` |
+| `db_path` | Path to the SQLite state database. | `"./fsd.db"` |
+| `ingest_check_interval` | How frequently the daemon checks for `PENDING` files to upload (e.g., "2s", "500ms"). | `"2s"` |
+| `ingest_batch_size` | Maximum number of files to process in a single upload cycle. | `10` |
+| `prune_check_interval` | How frequently the daemon checks disk usage (e.g., "1m", "30s"). | `"1m"` |
+| `prune_batch_size` | Maximum number of files to delete in a single pruning cycle. | `50` |
+| `api_timeout` | HTTP timeout for API requests (e.g., "30s"). | `"30s"` |
 
 ### CLI Usage
 

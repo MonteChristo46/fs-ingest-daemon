@@ -35,18 +35,22 @@ func NewIngester(cfg *config.Config, s *store.Store, logger *slog.Logger) *Inges
 	return &Ingester{
 		cfg:       cfg,
 		store:     s,
-		apiClient: api.NewClient(cfg.Endpoint),
+		apiClient: api.NewClient(cfg.Endpoint, cfg.APITimeout),
 		logger:    logger,
 		stop:      make(chan struct{}),
 	}
 }
 
 // Start initiates the background polling loop.
-// It checks for pending files every 2 seconds.
 func (i *Ingester) Start() {
 	go func() {
 		// Poll loop
-		ticker := time.NewTicker(2 * time.Second)
+		interval, err := time.ParseDuration(i.cfg.IngestCheckInterval)
+		if err != nil {
+			interval = 2 * time.Second
+			i.logger.Error("Invalid ingest check interval, defaulting to 2s", "error", err)
+		}
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -66,8 +70,8 @@ func (i *Ingester) Stop() {
 
 // processBatch fetches a batch of PENDING files from the store and triggers their upload.
 func (i *Ingester) processBatch() {
-	// Fetch up to 10 pending files to avoid overwhelming the network/system
-	files, err := i.store.GetPendingFiles(10)
+	// Fetch pending files based on batch size config
+	files, err := i.store.GetPendingFiles(i.cfg.IngestBatchSize)
 	if err != nil {
 		i.logger.Error("Ingester: Error fetching pending files", "error", err)
 		return

@@ -20,15 +20,21 @@ type Client struct {
 }
 
 // NewClient creates a new API client with configured timeouts and connection pooling.
-func NewClient(baseURL string) *Client {
+func NewClient(baseURL string, timeoutStr string) *Client {
+	timeout, err := time.ParseDuration(timeoutStr)
+	if err != nil {
+		timeout = 30 * time.Second
+	}
+
 	return &Client{
 		BaseURL: baseURL,
 		HTTPClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: timeout,
 			Transport: &http.Transport{
 				MaxIdleConns:        100,              // Keep connections open for high throughput
 				MaxIdleConnsPerHost: 100,              // Match max idle conns per host
-				IdleConnTimeout:     90 * time.Second, // Close idle connections after 90s
+				IdleConnTimeout:     90 * time.Second, // Close idle connections after 90s to purge memory
+				TLSHandshakeTimeout: 10 * time.Second, // Don't hang forever if TLS fails
 			},
 		},
 	}

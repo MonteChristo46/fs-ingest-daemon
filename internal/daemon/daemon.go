@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"fs-ingest-daemon/internal/config"
 	"fs-ingest-daemon/internal/ingest"
@@ -29,7 +30,7 @@ type Daemon struct {
 // Start is called when the service is started.
 // It initializes the configuration, database, and background workers (Pruner, Ingester, Watcher).
 func (d *Daemon) Start(s service.Service) error {
-	// 1. Load Config
+	// 1. Load Config if not already loaded (main usually loads it)
 	ex, err := os.Executable()
 	if err != nil {
 		return err
@@ -37,9 +38,11 @@ func (d *Daemon) Start(s service.Service) error {
 	exPath := filepath.Dir(ex)
 	cfgPath := filepath.Join(exPath, "config.json")
 
-	d.Cfg, err = config.Load(cfgPath)
-	if err != nil {
-		return fmt.Errorf("failed to load config: %v", err)
+	if d.Cfg == nil {
+		d.Cfg, err = config.Load(cfgPath)
+		if err != nil {
+			return fmt.Errorf("failed to load config: %v", err)
+		}
 	}
 
 	// Ensure config file exists for user convenience if it didn't
@@ -47,11 +50,10 @@ func (d *Daemon) Start(s service.Service) error {
 		config.Save(cfgPath, d.Cfg)
 	}
 
-	// 2. Initialize Store
-	dbPath := filepath.Join(exPath, "fsd.db")
-	d.DbStore, err = store.NewStore(dbPath)
+	// 2. Initialize Store using configured DB Path
+	d.DbStore, err = store.NewStore(d.Cfg.DBPath)
 	if err != nil {
-		return fmt.Errorf("failed to init store: %v", err)
+		return fmt.Errorf("failed to init store at %s: %v", d.Cfg.DBPath, err)
 	}
 
 	// 3. Start Pruner
@@ -67,33 +69,21 @@ func (d *Daemon) Start(s service.Service) error {
 		return fmt.Errorf("failed to create watch dir: %v", err)
 	}
 
-	onNewFile := func(path string) {
-		info, err := os.Stat(path)
-		if err != nil {
-			if d.Logger != nil {
-				d.Logger.Error("stat error", "error", err)
-			}
-			return
+	debounceDur, err := time.ParseDuration(d.Cfg.DebounceDuration)
+	if err != nil {
+		if d.Logger != nil {
+			d.Logger.Error("Invalid debounce duration, defaulting to 500ms", "error", err)
 		}
-		if info.IsDir() {
-			return
-		}
-
-		if err := d.DbStore.AddOrUpdateFile(path, info.Size(), info.ModTime()); err != nil {
-			if d.Logger != nil {
-				d.Logger.Error("db error", "error", err)
-			}
-		} else {
-			if d.Logger != nil {
-				d.Logger.Info("Detected", "path", path)
-			}
-		}
+		debounceDur = 500 * time.Millisecond
 	}
 
-	d.WatcherSvc, err = watcher.NewWatcher(d.Cfg.WatchPath, onNewFile, d.Logger)
+	d.WatcherSvc, err = watcher.NewWatcher(d.Cfg.WatchPath, debounceDur, d.processFile, d.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to start watcher: %v", err)
 	}
+
+	// 6. Initial Scan to catch files created while daemon was offline
+	go d.scanExistingFiles()
 
 	if d.Logger != nil {
 		d.Logger.Info("FS Ingest Daemon Started")
@@ -101,6 +91,49 @@ func (d *Daemon) Start(s service.Service) error {
 	}
 
 	return nil
+}
+
+// processFile handles a detected file by adding it to the store.
+func (d *Daemon) processFile(path string) {
+	info, err := os.Stat(path)
+	if err != nil {
+		if d.Logger != nil {
+			d.Logger.Error("stat error", "error", err)
+		}
+		return
+	}
+	if info.IsDir() {
+		return
+	}
+
+	if err := d.DbStore.AddOrUpdateFile(path, info.Size(), info.ModTime()); err != nil {
+		if d.Logger != nil {
+			d.Logger.Error("db error", "error", err)
+		}
+	} else {
+		if d.Logger != nil {
+			d.Logger.Info("Detected", "path", path)
+		}
+	}
+}
+
+// scanExistingFiles walks the watch path and processes all existing files.
+func (d *Daemon) scanExistingFiles() {
+	if d.Logger != nil {
+		d.Logger.Info("Performing initial scan", "path", d.Cfg.WatchPath)
+	}
+	err := filepath.Walk(d.Cfg.WatchPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			d.processFile(path)
+		}
+		return nil
+	})
+	if err != nil && d.Logger != nil {
+		d.Logger.Error("Initial scan failed", "error", err)
+	}
 }
 
 // Stop is called when the service is being stopped.

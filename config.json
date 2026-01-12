@@ -1,5 +1,14 @@
 {
+  "device_id": "dev-001",
   "endpoint": "http://localhost:8000",
   "max_data_size_gb": 1,
-  "watch_path": "./data"
+  "watch_path": "./data",
+  "log_path": "./fsd.log",
+  "db_path": "./fsd.db",
+  "ingest_check_interval": "2s",
+  "ingest_batch_size": 10,
+  "prune_check_interval": "1m",
+  "prune_batch_size": 50,
+  "api_timeout": "30s",
+  "debounce_duration": "500ms"
 }
