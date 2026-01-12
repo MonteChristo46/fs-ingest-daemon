@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -28,6 +29,10 @@ type Ingester struct {
 	apiClient *api.Client    // Client for cloud API interaction
 	logger    *slog.Logger   // Structured logger
 	stop      chan struct{}  // Channel to signal shutdown
+	jobs      chan store.FileRecord
+	pending   map[string]struct{}
+	pendingMu sync.Mutex
+	wg        sync.WaitGroup
 }
 
 // NewIngester creates a new Ingester instance.
@@ -38,12 +43,29 @@ func NewIngester(cfg *config.Config, s *store.Store, logger *slog.Logger) *Inges
 		apiClient: api.NewClient(cfg.Endpoint, cfg.APITimeout),
 		logger:    logger,
 		stop:      make(chan struct{}),
+		jobs:      make(chan store.FileRecord, cfg.IngestBatchSize),
+		pending:   make(map[string]struct{}),
 	}
 }
 
-// Start initiates the background polling loop.
+// Start initiates the background polling loop and workers.
 func (i *Ingester) Start() {
+	workerCount := i.cfg.IngestWorkerCount
+	if workerCount <= 0 {
+		workerCount = 1
+	}
+
+	for n := 0; n < workerCount; n++ {
+		i.wg.Add(1)
+		go func() {
+			defer i.wg.Done()
+			i.worker()
+		}()
+	}
+
+	i.wg.Add(1)
 	go func() {
+		defer i.wg.Done()
 		// Poll loop
 		interval, err := time.ParseDuration(i.cfg.IngestCheckInterval)
 		if err != nil {
@@ -57,6 +79,7 @@ func (i *Ingester) Start() {
 			case <-ticker.C:
 				i.processBatch()
 			case <-i.stop:
+				close(i.jobs)
 				return
 			}
 		}
@@ -66,6 +89,7 @@ func (i *Ingester) Start() {
 // Stop signals the polling loop to exit.
 func (i *Ingester) Stop() {
 	close(i.stop)
+	i.wg.Wait()
 }
 
 // processBatch fetches a batch of PENDING files from the store and triggers their upload.
@@ -78,7 +102,34 @@ func (i *Ingester) processBatch() {
 	}
 
 	for _, f := range files {
+		i.pendingMu.Lock()
+		if _, exists := i.pending[f.Path]; exists {
+			i.pendingMu.Unlock()
+			continue
+		}
+		i.pending[f.Path] = struct{}{}
+		i.pendingMu.Unlock()
+
+		select {
+		case i.jobs <- f:
+			// successfully queued
+		default:
+			// Channel full, release pending lock and skip
+			i.pendingMu.Lock()
+			delete(i.pending, f.Path)
+			i.pendingMu.Unlock()
+			i.logger.Warn("Ingest job queue full, skipping file", "path", f.Path)
+		}
+	}
+}
+
+func (i *Ingester) worker() {
+	for f := range i.jobs {
 		i.upload(f)
+
+		i.pendingMu.Lock()
+		delete(i.pending, f.Path)
+		i.pendingMu.Unlock()
 	}
 }
 

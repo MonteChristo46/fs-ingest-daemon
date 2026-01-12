@@ -7,6 +7,7 @@
   "db_path": "./fsd.db",
   "ingest_check_interval": "2s",
   "ingest_batch_size": 10,
+  "ingest_worker_count":   5,
   "prune_check_interval": "1m",
   "prune_batch_size": 50,
   "api_timeout": "30s",

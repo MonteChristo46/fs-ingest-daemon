@@ -20,6 +20,7 @@ type Config struct {
 	DBPath              string  `json:"db_path"`               // Path to the SQLite database
 	IngestCheckInterval string  `json:"ingest_check_interval"` // Duration string (e.g. "2s") for ingest polling
 	IngestBatchSize     int     `json:"ingest_batch_size"`     // Number of files to process per ingest tick
+	IngestWorkerCount   int     `json:"ingest_worker_count"`   // Number of concurrent upload workers
 	PruneCheckInterval  string  `json:"prune_check_interval"`  // Duration string (e.g. "1m") for prune checks
 	PruneBatchSize      int     `json:"prune_batch_size"`      // Number of files to prune per tick
 	APITimeout          string  `json:"api_timeout"`           // HTTP Client timeout duration string
@@ -39,6 +40,7 @@ func Load(path string) (*Config, error) {
 		DBPath:              "./fsd.db",
 		IngestCheckInterval: "2s",
 		IngestBatchSize:     10,
+		IngestWorkerCount:   5,
 		PruneCheckInterval:  "1m",
 		PruneBatchSize:      50,
 		APITimeout:          "30s",
