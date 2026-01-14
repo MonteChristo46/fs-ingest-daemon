@@ -1,0 +1,46 @@
+@startuml
+title Authorized Equipment Ingestion Flow
+
+skinparam sequenceMessageAlign center
+skinparam NoteBackgroundColor #LightGreen
+
+participant "Watcher" as W
+database "Local SQLite" as DB
+participant "Ingester Service" as I
+participant "Cloud API" as API
+participant "Cloud Storage (S3)" as S3
+
+== 1. Authorization & Handshake ==
+I -> DB : GetPendingFiles(batch_size)
+DB -> I : Return PENDING file records
+
+I -> API : POST /v1/ingest {DeviceID, SHA256, Metadata}
+note right of API: DeviceID "ABC-123" is verified\nas 'Claimed' by User.
+
+API -> I : 200 OK {UploadURL: "https://s3...", HandshakeID: "xyz"}
+
+== 2. Data Transfer ==
+I -> I : Open local file
+I -> S3 : HTTP PUT (File Content)
+S3 -> I : 200 OK
+
+== 3. Handshake Finalization ==
+I -> API : POST /v1/confirm {HandshakeID, Status: SUCCESS}
+API -> I : 200 OK
+
+== 4. Local State Transition ==
+I -> DB : MarkUploaded(path)
+note over DB: Status changes from\n'PENDING' to 'UPLOADED'
+
+== 5. Lifecycle Management (Pruner) ==
+loop PruneCheckInterval
+    I -> DB : GetTotalSize()
+    alt Size > MaxDataSizeGB
+        I -> DB : GetPruneCandidates(Status: UPLOADED)
+        DB -> I : Return UPLOADED files (LRM)
+        I -> I : os.Remove(path)
+        I -> DB : RemoveFile(path)
+        note right: Space is reclaimed safely.
+    end
+end
+@enduml

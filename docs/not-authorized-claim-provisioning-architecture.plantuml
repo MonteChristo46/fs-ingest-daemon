@@ -1,0 +1,49 @@
+@startuml
+title Unregistered Equipment Handshake & Data Integrity
+
+skinparam sequenceMessageAlign center
+skinparam NoteBackgroundColor #LightYellow
+
+participant "Local File System" as FS
+participant "Watcher" as W
+participant "Daemon Controller" as D
+database "Local SQLite" as DB
+participant "Ingester Service" as I
+participant "Cloud API" as API
+database "Cloud Registry" as C_DB
+
+== Detection & Local Persistence ==
+W -> FS : Detects new file
+W -> D : processFile(path)
+D -> DB : AddOrUpdateFile(path, size, Status: PENDING)
+
+== Unauthorized Handshake Attempt ==
+I -> DB : GetPendingFiles(batch_size)
+DB -> I : Return file records
+I -> I : Calculate SHA256
+
+I -> API : POST /v1/ingest (DeviceID, Metadata, SHA256)
+API -> C_DB : Lookup: Is DeviceID linked to a User?
+C_DB -> API : Result: NOT_FOUND (Unclaimed)
+
+API -> I : 401 Unauthorized / 403 Forbidden
+note over API, I: No UploadURL is provided.
+
+== Local Backpressure & Resilience ==
+I -> I : Log: "Ingest request failed"
+note over I, DB: File remains Status: PENDING.\nIt will NOT be marked as UPLOADED.
+
+I -> I : Wait for IngestCheckInterval
+I -> API : Retry Handshake... (Loop)
+
+== The Safety Valve (Pruner) ==
+loop PruneCheckInterval
+    D -> DB : GetTotalSize()
+    alt Size > MaxDataSizeGB
+        D -> DB : GetPruneCandidates(Status: UPLOADED)
+        DB -> D : Return: EMPTY (No files uploaded yet)
+        D -> D : Log: "Disk full but no UPLOADED files to delete!"
+        note right of D: BACKPRESSURE: No data loss occurs.\nDaemon stops adding new files.
+    end
+end
+@enduml
