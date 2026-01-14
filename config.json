@@ -1,6 +1,6 @@
 {
   "device_id": "dev-001",
-  "endpoint": "http://localhost:8000",
+  "endpoint": "https://glitch-hunt-ingestion.my-basement.cloud",
   "max_data_size_gb": 1,
   "watch_path": "./data",
   "log_path": "./fsd.log",
