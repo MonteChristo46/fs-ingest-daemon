@@ -38,7 +38,7 @@ func Load(path string) (*Config, error) {
 		WatchPath:           "./data",
 		LogPath:             "./fsd.log",
 		DBPath:              "./fsd.db",
-		IngestCheckInterval: "2s",
+		IngestCheckInterval: "20ms",
 		IngestBatchSize:     10,
 		IngestWorkerCount:   5,
 		PruneCheckInterval:  "1m",

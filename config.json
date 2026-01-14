@@ -5,11 +5,11 @@
   "watch_path": "./data",
   "log_path": "./fsd.log",
   "db_path": "./fsd.db",
-  "ingest_check_interval": "2s",
+  "ingest_check_interval": "3s",
   "ingest_batch_size": 10,
-  "ingest_worker_count":   5,
+  "ingest_worker_count":  2,
   "prune_check_interval": "1m",
   "prune_batch_size": 50,
   "api_timeout": "30s",
-  "debounce_duration": "500ms"
+  "debounce_duration": "50ms"
 }

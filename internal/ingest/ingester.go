@@ -142,25 +142,37 @@ func (i *Ingester) worker() {
 // 6. Mark file as UPLOADED in local store.
 func (i *Ingester) upload(f store.FileRecord) {
 	// 0. Calculate SHA256 for integrity check
-	checksum, err := calculateSHA256(f.Path)
-	if err != nil {
-		i.logger.Error("Ingester: Failed to calculate checksum", "path", f.Path, "error", err)
-		return
+	// Run in a goroutine to allow metadata extraction and request prep to overlap
+	type hashResult struct {
+		sum string
+		err error
 	}
+	hashCh := make(chan hashResult, 1)
+	go func() {
+		sum, err := calculateSHA256(f.Path)
+		hashCh <- hashResult{sum, err}
+	}()
 
 	// 1. Extract Metadata and Context based on directory structure
 	context, meta := util.ExtractMetadata(i.cfg.WatchPath, f.Path)
 
 	// 2. Ingest Request - Ask API for permission and upload URL
 	req := api.IngestRequest{
-		DeviceID:       i.cfg.DeviceID,
-		Filename:       filepath.Base(f.Path),
-		FileSizeBytes:  f.Size,
-		SHA256Checksum: checksum,
-		Context:        context,
-		Metadata:       meta,
-		Timestamp:      time.Now(),
+		DeviceID:      i.cfg.DeviceID,
+		Filename:      filepath.Base(f.Path),
+		FileSizeBytes: f.Size,
+		Context:       context,
+		Metadata:      meta,
+		Timestamp:     time.Now(),
 	}
+
+	// Wait for checksum
+	res := <-hashCh
+	if res.err != nil {
+		i.logger.Error("Ingester: Failed to calculate checksum", "path", f.Path, "error", res.err)
+		return
+	}
+	req.SHA256Checksum = res.sum
 
 	resp, err := i.apiClient.Ingest(req)
 	if err != nil {
