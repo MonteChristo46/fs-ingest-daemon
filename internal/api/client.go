@@ -89,3 +89,65 @@ func (c *Client) Confirm(req ConfirmRequest) error {
 
 	return nil
 }
+
+// RequestPairingCode requests a new pairing code for the device.
+func (c *Client) RequestPairingCode(deviceID string) (*PairingResponse, error) {
+	req := PairingRequest{DeviceID: deviceID}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal pairing request: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/v1/pairing/request", c.BaseURL)
+	resp, err := c.HTTPClient.Post(url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to send pairing request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("pairing request failed with status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var pairingResp PairingResponse
+	if err := json.NewDecoder(resp.Body).Decode(&pairingResp); err != nil {
+		return nil, fmt.Errorf("failed to decode pairing response: %w", err)
+	}
+
+	return &pairingResp, nil
+}
+
+// CheckPairingStatus checks if the device has been claimed.
+func (c *Client) CheckPairingStatus(deviceID string, code string) (*PairingStatusResponse, error) {
+	url := fmt.Sprintf("%s/v1/pairing/status?device_id=%s&code=%s", c.BaseURL, deviceID, code)
+	fmt.Printf("DEBUG: Checking status at %s\n", url)
+	resp, err := c.HTTPClient.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check pairing status: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		// If 202 or 404 are returned as status codes for logic, handle them.
+		// However, the spec says it returns JSON with status enum.
+		// If the server returns non-200 for logical states (like 404 for expired), handle that:
+		if resp.StatusCode == http.StatusNotFound {
+			return &PairingStatusResponse{Status: PairingStatusExpired}, nil
+		}
+		if resp.StatusCode == http.StatusAccepted {
+			return &PairingStatusResponse{Status: PairingStatusWaiting}, nil
+		}
+
+		respBody, _ := io.ReadAll(resp.Body)
+		// Explicitly print the status code for debugging in the error
+		return nil, fmt.Errorf("check pairing status failed with status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var statusResp PairingStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&statusResp); err != nil {
+		return nil, fmt.Errorf("failed to decode pairing status response: %w", err)
+	}
+
+	return &statusResp, nil
+}

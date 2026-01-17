@@ -40,3 +40,29 @@ type ConfirmRequest struct {
 	ErrorMessage *string      `json:"error_message"`           // Error details if Status is FAILED, nullable
 	UploadedPath *string      `json:"uploaded_path,omitempty"` // The resulting path/key in cloud storage, optional
 }
+
+// PairingRequest represents the payload to request a pairing code.
+type PairingRequest struct {
+	DeviceID string `json:"device_id"` // The device's unique hardware identifier
+}
+
+// PairingResponse represents the response containing the pairing code.
+type PairingResponse struct {
+	Code      string    `json:"code"`       // The short code for the user to enter
+	ExpiresAt time.Time `json:"expires_at"` // When the code expires
+}
+
+// PairingStatus defines the status of the pairing process.
+type PairingStatus string
+
+const (
+	PairingStatusWaiting PairingStatus = "WAITING"
+	PairingStatusClaimed PairingStatus = "CLAIMED"
+	PairingStatusExpired PairingStatus = "EXPIRED"
+)
+
+// PairingStatusResponse represents the response from the pairing status check.
+type PairingStatusResponse struct {
+	Status PairingStatus `json:"status"` // WAITING, CLAIMED, EXPIRED
+	APIKey *string       `json:"apikey"` // The API Key if claimed
+}

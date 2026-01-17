@@ -93,7 +93,7 @@ func main() {
 	dmn.Logger = logger
 
 	// Initialize CLI and execute
-	rootCmd := cli.NewRootCmd(s, logger, logPath)
+	rootCmd := cli.NewRootCmd(s, logger, logPath, cfgPath)
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

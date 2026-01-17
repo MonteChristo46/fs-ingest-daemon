@@ -1,0 +1,50 @@
+@startuml
+skinparam actorStyle awesome
+autonumber
+
+actor "Industrial PC (Hardware)" as HW
+participant "fs-ingest-daemon" as FSD
+database "config.json" as CFG
+database "SQLite (fsd.db)" as DB
+participant "Cloud API" as API
+
+== 1. Initialization & Identity Discovery ==
+FSD -> HW : Query MAC Address & CPU Serial (Non-Admin)
+return Hardware Signals
+FSD -> FSD : Generate SHA-256 Hardware Hash (DeviceID)
+
+== 2. Equipment Registration (First-Time Only) ==
+FSD -> CFG : Check for AuthToken
+CFG --> FSD : AuthToken is Empty
+
+FSD -> API : POST /register {DeviceID, OS, Hostname, HW_Info}
+note right: Ensures the cloud knows this specific IPC
+API -> API : Validate/Create Equipment Record
+return 201 Created {AuthToken, CloudConfig}
+
+FSD -> CFG : Update DeviceID & Save AuthToken
+FSD -> FSD : Lock Identity (Immutable)
+
+== 3. File Watcher & Detection ==
+HW -> FSD : File System Event (New Image)
+FSD -> FSD : Debounce (Wait for write to finish)
+FSD -> DB : Insert Record (Status: PENDING)
+
+== 4. Managed Ingestion Handshake ==
+loop Every IngestCheckInterval
+    FSD -> DB : Get PENDING Files
+    DB --> FSD : List of Files
+
+    FSD -> API : POST /ingest {DeviceID, AuthToken, FileMetadata}
+    note right: Handshake for S3 Upload URL
+    API --> FSD : 200 OK {HandshakeID, UploadURL}
+
+    FSD -> API : PUT Binary to UploadURL (S3)
+    return 200 OK (Transfer Success)
+
+    FSD -> API : POST /confirm {HandshakeID, Status: SUCCESS}
+    return 200 OK
+
+    FSD -> DB : Update Status to UPLOADED
+end
+@enduml

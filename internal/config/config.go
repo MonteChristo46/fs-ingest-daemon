@@ -25,6 +25,8 @@ type Config struct {
 	PruneBatchSize      int     `json:"prune_batch_size"`      // Number of files to prune per tick
 	APITimeout          string  `json:"api_timeout"`           // HTTP Client timeout duration string
 	DebounceDuration    string  `json:"debounce_duration"`     // Duration string (e.g. "500ms") for watcher debounce
+	AuthToken           string  `json:"auth_token"`            // Token indicating the device is registered (or empty if not)
+	WebClientURL        string  `json:"web_client_url"`        // URL where the user claims the device
 }
 
 // Load reads the configuration from the specified path.
@@ -33,7 +35,7 @@ func Load(path string) (*Config, error) {
 	// Initialize with sensible defaults
 	cfg := &Config{
 		DeviceID:            "dev-001",
-		Endpoint:            "https://localhost:8080",
+		Endpoint:            "http://localhost:8000",
 		MaxDataSizeGB:       1.0,
 		WatchPath:           "./data",
 		LogPath:             "./fsd.log",
@@ -45,6 +47,7 @@ func Load(path string) (*Config, error) {
 		PruneBatchSize:      50,
 		APITimeout:          "30s",
 		DebounceDuration:    "500ms",
+		WebClientURL:        "http://localhost:5173",
 	}
 
 	f, err := os.Open(path)
