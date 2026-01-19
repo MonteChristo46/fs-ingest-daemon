@@ -12,6 +12,6 @@
   "prune_batch_size": 50,
   "api_timeout": "30s",
   "debounce_duration": "50ms",
-  "auth_token": "oc9nm7pJh_J5W1p9yNbwXblXC2xkzWGjM294ZGr7p80",
+  "auth_token": "",
   "web_client_url": "http://localhost:5173"
 }
