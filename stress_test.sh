@@ -8,7 +8,7 @@ if ! pgrep -x "fsd" > /dev/null; then
 fi
 
 # Configuration
-ROOT_DIR=${1:-"./data"}
+ROOT_DIR=${1:-"./fsd-watch"}
 TEST_DATA_DIR=${2:-"./test-data"}
 NUM_CAMS=${3:-5}
 FILES_PER_CAM=${4:-20}

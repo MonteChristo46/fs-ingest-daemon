@@ -38,6 +38,20 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 				return
 			}
 
+			// 1.5 Ensure WatchPath exists
+			if cfg.WatchPath != "" {
+				if _, err := os.Stat(cfg.WatchPath); os.IsNotExist(err) {
+					fmt.Printf("Watch directory does not exist. Creating: %s\n", cfg.WatchPath)
+					if err := os.MkdirAll(cfg.WatchPath, 0755); err != nil {
+						fmt.Printf("Error creating watch directory: %v\n", err)
+						return
+					}
+					fmt.Println("Watch directory created successfully.")
+				} else {
+					fmt.Printf("Watch directory already exists: %s\n", cfg.WatchPath)
+				}
+			}
+
 			// 2. Check DeviceID Fingerprint
 			// "Immutability: If the field is already populated (not 'dev-001' or empty),
 			// the daemon ignores the current hardware and uses the stored value."

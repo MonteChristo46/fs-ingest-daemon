@@ -2,9 +2,9 @@
   "device_id": "d6:76:9c:79:a2:fb",
   "endpoint": "http://localhost:8000",
   "max_data_size_gb": 1,
-  "watch_path": "/Users/danielhoschele/VisualStudioProjects/fs-ingest-daemon/data",
-  "log_path": "/Users/danielhoschele/VisualStudioProjects/fs-ingest-daemon/fsd.log",
-  "db_path": "/Users/danielhoschele/VisualStudioProjects/fs-ingest-daemon/fsd.db",
+  "watch_path": "/Users/danielhoschele/Desktop/source-tree/fs-ingest-daemon/fsd-watch",
+  "log_path": "/Users/danielhoschele/Desktop/source-tree/fs-ingest-daemon/fsd.log",
+  "db_path": "/Users/danielhoschele/Desktop/source-tree/fs-ingest-daemon/fsd.db",
   "ingest_check_interval": "3s",
   "ingest_batch_size": 10,
   "ingest_worker_count": 2,
@@ -12,6 +12,6 @@
   "prune_batch_size": 50,
   "api_timeout": "30s",
   "debounce_duration": "50ms",
-  "auth_token": "JGBPB49ZjPGielZv-1OEgrOHs1FMu6tkQKQB1d9LYAQ",
+  "auth_token": "9Fzfg-mBH9xVoip6i4Bt_jZt9eskrP6wBkNtK9uHkwY",
   "web_client_url": "http://localhost:5173"
 }
