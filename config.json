@@ -1,6 +1,6 @@
 {
   "device_id": "d6:76:9c:79:a2:fb",
-  "endpoint": "http://localhost:8000",
+  "endpoint": "https://glitch-hunt-ingestion.my-basement.cloud",
   "max_data_size_gb": 1,
   "watch_path": "/Users/danielhoschele/Desktop/source-tree/fs-ingest-daemon/fsd-watch",
   "log_path": "/Users/danielhoschele/Desktop/source-tree/fs-ingest-daemon/fsd.log",
