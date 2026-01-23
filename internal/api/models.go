@@ -7,13 +7,14 @@ import (
 // IngestRequest represents the payload for initiating a file ingestion.
 // It contains metadata about the file and the device context.
 type IngestRequest struct {
-	DeviceID       string            `json:"device_id"`       // Unique identifier for the edge device
-	Filename       string            `json:"filename"`        // Name of the file being uploaded
-	FileSizeBytes  int64             `json:"file_size_bytes"` // Size of the file in bytes
-	SHA256Checksum string            `json:"sha256_checksum"` // SHA256 hash for integrity verification
-	Context        []string          `json:"context"`         // Contextual tags (e.g., directory structure: ["cam1", "2023"])
-	Metadata       map[string]string `json:"metadata"`        // Key-value pairs of extracted metadata
-	Timestamp      time.Time         `json:"timestamp"`       // Time of capture/ingest
+	DeviceID        string                 `json:"device_id"`         // Unique identifier for the edge device
+	Filename        string                 `json:"filename"`          // Name of the file being uploaded
+	FileSizeBytes   int64                  `json:"file_size_bytes"`   // Size of the file in bytes
+	SHA256Checksum  string                 `json:"sha256_checksum"`   // SHA256 hash for integrity verification
+	FilePathContext []string               `json:"file_path_context"` // Contextual tags (e.g., directory structure: ["cam1", "2023"])
+	DeviceContext   map[string]interface{} `json:"device_context"`    // Device specific context
+	Metadata        map[string]string      `json:"metadata"`          // Key-value pairs of extracted metadata
+	Timestamp       time.Time              `json:"timestamp"`         // Time of capture/ingest
 }
 
 // IngestResponse represents the API response after a successful IngestRequest.

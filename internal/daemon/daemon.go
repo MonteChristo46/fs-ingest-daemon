@@ -85,12 +85,48 @@ func (d *Daemon) Start(s service.Service) error {
 	// 6. Initial Scan to catch files created while daemon was offline
 	go d.scanExistingFiles()
 
+	// 7. Start Orphan Checker
+	go d.orphanChecker()
+
 	if d.Logger != nil {
 		d.Logger.Info("FS Ingest Daemon Started")
 		d.Logger.Info("Configuration", "watch_path", d.Cfg.WatchPath, "endpoint", d.Cfg.Endpoint)
 	}
 
 	return nil
+}
+
+// orphanChecker runs periodically to mark timed-out files as ORPHAN.
+func (d *Daemon) orphanChecker() {
+	orphanInterval, err := time.ParseDuration(d.Cfg.OrphanCheckInterval)
+	if err != nil {
+		d.Logger.Error("Invalid orphan check interval, defaulting to 5 minutes", "error", err)
+		orphanInterval = 5 * time.Minute
+	}
+
+	ticker := time.NewTicker(orphanInterval)
+	defer ticker.Stop()
+
+	// Use a timeout slightly less than the check interval to avoid race conditions.
+	// For example, if we check every 5m, mark files older than 4m as orphans.
+	timeout := orphanInterval - 1*time.Minute
+	if timeout < 1*time.Minute { // Ensure timeout is not ridiculously small
+		timeout = 1 * time.Minute
+	}
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := d.DbStore.MarkOrphans(timeout); err != nil {
+				if d.Logger != nil {
+					d.Logger.Error("Failed to mark orphans", "error", err)
+				}
+			}
+			// We rely on service stop to kill this goroutine implicitly when the process exits,
+			// or we could add a stop channel if strictly needed.
+			// For simplicity in this daemon structure, we assume process termination.
+		}
+	}
 }
 
 // processFile handles a detected file by adding it to the store.
@@ -106,7 +142,10 @@ func (d *Daemon) processFile(path string) {
 		return
 	}
 
-	if err := d.DbStore.AddOrUpdateFile(path, info.Size(), info.ModTime()); err != nil {
+	// Check extension to determine if it is metadata
+	isMeta := filepath.Ext(path) == ".json"
+
+	if err := d.DbStore.RegisterFile(path, info.Size(), info.ModTime(), isMeta); err != nil {
 		if d.Logger != nil {
 			d.Logger.Error("db error", "error", err)
 		}

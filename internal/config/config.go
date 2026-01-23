@@ -25,6 +25,7 @@ type Config struct {
 	PruneBatchSize      int     `json:"prune_batch_size"`      // Number of files to prune per tick
 	APITimeout          string  `json:"api_timeout"`           // HTTP Client timeout duration string
 	DebounceDuration    string  `json:"debounce_duration"`     // Duration string (e.g. "500ms") for watcher debounce
+	OrphanCheckInterval string  `json:"orphan_check_interval"` // Duration string (e.g. "5m") for orphan checks
 	AuthToken           string  `json:"auth_token"`            // Token indicating the device is registered (or empty if not)
 	WebClientURL        string  `json:"web_client_url"`        // URL where the user claims the device
 }
@@ -47,6 +48,7 @@ func Load(path string) (*Config, error) {
 		PruneBatchSize:      50,
 		APITimeout:          "30s",
 		DebounceDuration:    "500ms",
+		OrphanCheckInterval: "5m",
 		WebClientURL:        "http://localhost:5173",
 	}
 

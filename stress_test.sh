@@ -30,15 +30,22 @@ if [ ! -d "$TEST_DATA_DIR" ]; then
     exit 1
 fi
 
-# Load images into array
+# Load images into array (looking into images subdirectory)
+IMAGE_DIR="$TEST_DATA_DIR/images"
+
+if [ ! -d "$IMAGE_DIR" ]; then
+    echo "Error: Image directory '$IMAGE_DIR' does not exist."
+    exit 1
+fi
+
 shopt -s nullglob
-IMAGES=("$TEST_DATA_DIR"/*)
+IMAGES=("$IMAGE_DIR"/*.png "$IMAGE_DIR"/*.jpg "$IMAGE_DIR"/*.jpeg)
 shopt -u nullglob
 
 NUM_IMAGES=${#IMAGES[@]}
 
 if [ "$NUM_IMAGES" -eq 0 ]; then
-    echo "Error: No files found in '$TEST_DATA_DIR'."
+    echo "Error: No image files (png/jpg/jpeg) found in '$IMAGE_DIR'."
     exit 1
 fi
 
@@ -58,10 +65,7 @@ for ((i=1; i<=NUM_CAMS; i++)); do
 
     # Generate files
     for ((j=1; j<=FILES_PER_CAM; j++)); do
-        # Unique filename (keep extension from source or default to .jpg?)
-        # Let's keep it simple and just use .jpg or .png based on source if possible, 
-        # but the request didn't specify dynamic extensions. 
-        # However, to be safe, let's grab the extension from the source file.
+        # Unique filename (keep extension from source)
         
         # Pick random image
         RAND_INDEX=$(( RANDOM % NUM_IMAGES ))
@@ -73,6 +77,16 @@ for ((i=1; i<=NUM_CAMS; i++)); do
         
         # Copy file
         cp "$SOURCE_FILE" "$FILE_PATH"
+
+        # Create Random Context File
+        # Randomly select context_1.json or context_2.json
+        RAND_CTX=$(( RANDOM % 2 + 1 ))
+        CTX_SOURCE="$TEST_DATA_DIR/context_${RAND_CTX}.json"
+        
+        # Copy context file if it exists, appending .json to the image filename
+        if [ -f "$CTX_SOURCE" ]; then
+            cp "$CTX_SOURCE" "$FILE_PATH.json"
+        fi
 
         # Optional: Print progress every 10 files
         if (( j % 10 == 0 )); then

@@ -7,6 +7,7 @@ package ingest
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"fs-ingest-daemon/internal/api"
 	"fs-ingest-daemon/internal/config"
@@ -141,7 +142,40 @@ func (i *Ingester) worker() {
 // 5. Confirm success with the API.
 // 6. Mark file as UPLOADED in local store.
 func (i *Ingester) upload(f store.FileRecord) {
-	// 0. Calculate SHA256 for integrity check
+	// 0. Check if this is a metadata file
+	// If it is a .json file AND it has a partner path, we skip it.
+	// The partner (the image) will handle the upload and mark this one as done.
+	if filepath.Ext(f.Path) == ".json" {
+		if f.PartnerPath.Valid && f.PartnerPath.String != "" {
+			i.logger.Info("Skipping metadata file, waiting for partner", "path", f.Path, "partner", f.PartnerPath.String)
+			return
+		}
+		// If it's an orphan json (no partner detected or partner lost), we process it?
+		// For now, let's proceed, effectively uploading the JSON as a file itself,
+		// or we could decide to fail it.
+		// Proceeding might be useful for debugging.
+	}
+
+	// 0.5. Load DeviceContext from partner if available
+	var deviceContext map[string]interface{}
+	if f.PartnerPath.Valid && f.PartnerPath.String != "" {
+		// Attempt to read the JSON file
+		jsonFile, err := os.Open(f.PartnerPath.String)
+		if err == nil {
+			defer jsonFile.Close()
+			if err := json.NewDecoder(jsonFile).Decode(&deviceContext); err != nil {
+				i.logger.Warn("Failed to decode device context from partner", "partner", f.PartnerPath.String, "error", err)
+			}
+		} else {
+			i.logger.Warn("Failed to open partner file for context", "partner", f.PartnerPath.String, "error", err)
+		}
+	}
+
+	if deviceContext == nil {
+		deviceContext = make(map[string]interface{})
+	}
+
+	// 1. Calculate SHA256 for integrity check
 	// Run in a goroutine to allow metadata extraction and request prep to overlap
 	type hashResult struct {
 		sum string
@@ -153,22 +187,28 @@ func (i *Ingester) upload(f store.FileRecord) {
 		hashCh <- hashResult{sum, err}
 	}()
 
-	// 1. Extract Metadata and Context based on directory structure
+	// 2. Extract Metadata and Context based on directory structure
 	context, meta := util.ExtractMetadata(i.cfg.WatchPath, f.Path)
 
-	// 2. Ingest Request - Ask API for permission and upload URL
+	// 3. Ingest Request - Ask API for permission and upload URL
 	req := api.IngestRequest{
-		DeviceID:      i.cfg.DeviceID,
-		Filename:      filepath.Base(f.Path),
-		FileSizeBytes: f.Size,
-		Context:       context,
-		Metadata:      meta,
-		Timestamp:     time.Now(),
+		DeviceID:        i.cfg.DeviceID,
+		Filename:        filepath.Base(f.Path),
+		FileSizeBytes:   f.Size,
+		FilePathContext: context,
+		DeviceContext:   deviceContext,
+		Metadata:        meta,
+		Timestamp:       time.Now(),
 	}
 
 	// Wait for checksum
 	res := <-hashCh
 	if res.err != nil {
+		if os.IsNotExist(res.err) {
+			i.logger.Warn("Ingester: File vanished before processing, removing from DB", "path", f.Path)
+			_ = i.store.RemoveFile(f.Path)
+			return
+		}
 		i.logger.Error("Ingester: Failed to calculate checksum", "path", f.Path, "error", res.err)
 		return
 	}
@@ -180,7 +220,7 @@ func (i *Ingester) upload(f store.FileRecord) {
 		return
 	}
 
-	// 3. Upload to Presigned URL
+	// 4. Upload to Presigned URL
 	i.logger.Info("Starting upload", "path", f.Path, "size", f.Size, "upload_url", resp.UploadURL)
 
 	uploadStart := time.Now()
@@ -199,7 +239,7 @@ func (i *Ingester) upload(f store.FileRecord) {
 	}
 	uploadDuration := time.Since(uploadStart)
 
-	// 4. Confirm Success with API
+	// 5. Confirm Success with API
 	var uploadedPath *string
 	u, err := url.Parse(resp.UploadURL)
 	if err == nil {
@@ -221,11 +261,17 @@ func (i *Ingester) upload(f store.FileRecord) {
 		return
 	}
 
-	// 5. Mark as Uploaded in local DB
+	// 6. Mark as Uploaded in local DB
 	if err := i.store.MarkUploaded(f.Path); err != nil {
 		i.logger.Error("Ingester: Failed to mark as uploaded", "path", f.Path, "error", err)
 	} else {
 		i.logger.Info("Upload success", "path", f.Path, "duration", uploadDuration)
+		// If we have a partner, mark it as uploaded too
+		if f.PartnerPath.Valid && f.PartnerPath.String != "" {
+			if err := i.store.MarkUploaded(f.PartnerPath.String); err != nil {
+				i.logger.Error("Ingester: Failed to mark partner as uploaded", "partner", f.PartnerPath.String, "error", err)
+			}
+		}
 	}
 }
 
