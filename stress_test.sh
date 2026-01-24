@@ -83,9 +83,10 @@ for ((i=1; i<=NUM_CAMS; i++)); do
         RAND_CTX=$(( RANDOM % 2 + 1 ))
         CTX_SOURCE="$TEST_DATA_DIR/context_${RAND_CTX}.json"
         
-        # Copy context file if it exists, appending .json to the image filename
+        # Copy context file if it exists, replacing extension with .json
         if [ -f "$CTX_SOURCE" ]; then
-            cp "$CTX_SOURCE" "$FILE_PATH.json"
+            JSON_PATH="${FILE_PATH%.*}.json"
+            cp "$CTX_SOURCE" "$JSON_PATH"
         fi
 
         # Optional: Print progress every 10 files

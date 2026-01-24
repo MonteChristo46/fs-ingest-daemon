@@ -6,6 +6,7 @@ package store
 
 import (
 	"database/sql"
+	"path/filepath"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -93,27 +94,55 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 	}
 	defer tx.Rollback()
 
-	// Determine partner path
-	var partnerPath string
-	if isMeta {
-		// If I am .json, my partner is the base file (remove .json suffix)
-		// Assuming strict naming convention: file.png.json -> file.png
-		partnerPath = path[:len(path)-5]
-	} else {
-		// If I am data, my partner is .json
-		partnerPath = path + ".json"
-	}
-
-	// Check if partner exists in DB
-	// We only care if the partner is currently tracked (Wait or Pending)
-	// If partner is already UPLOADED, we might process this as an orphan or re-upload?
-	// For now, let's look for any record of the partner.
 	var partnerID int64
 	var partnerStatus FileStatus
-	err = tx.QueryRow("SELECT id, status FROM files WHERE path = ?", partnerPath).Scan(&partnerID, &partnerStatus)
+	var partnerPath string
+	var foundPartner bool
 
-	if err == sql.ErrNoRows {
+	if !isMeta {
+		// I am an image (data). My partner MUST be my filename with .json extension.
+		// e.g. /path/to/img.png -> /path/to/img.json
+		ext := filepath.Ext(path)
+		// Handle cases with no extension gracefully, though unlikely
+		if len(ext) > 0 {
+			partnerPath = path[:len(path)-len(ext)] + ".json"
+		} else {
+			partnerPath = path + ".json"
+		}
+
+		// Check if my partner (the json file) is already in the DB
+		// Since partner is .json, its path is known.
+		err = tx.QueryRow("SELECT id, status FROM files WHERE path = ?", partnerPath).Scan(&partnerID, &partnerStatus)
+		if err == nil {
+			foundPartner = true
+		} else if err != sql.ErrNoRows {
+			return err
+		}
+
+	} else {
+		// I am metadata (.json). I don't know my partner's extension.
+		// e.g. /path/to/img.json -> could be img.png, img.jpg, img.jpeg...
+		// But if my partner arrived first, they would have calculated MY path as their 'partner_path'.
+		// So I search for the record that claims me as a partner.
+		err = tx.QueryRow("SELECT id, status, path FROM files WHERE partner_path = ?", path).Scan(&partnerID, &partnerStatus, &partnerPath)
+		if err == nil {
+			foundPartner = true
+		} else if err != sql.ErrNoRows {
+			return err
+		}
+	}
+
+	if !foundPartner {
 		// Partner not found -> I am waiting.
+		// If I am an image: partner_path is known (calculated above).
+		// If I am meta: partner_path is unknown (I can't guess the image extension), so we leave it NULL/empty.
+
+		var pp sql.NullString
+		if partnerPath != "" {
+			pp.String = partnerPath
+			pp.Valid = true
+		}
+
 		query := `
 		INSERT INTO files (path, size, mod_time, status, partner_path)
 		VALUES (?, ?, ?, ?, ?)
@@ -124,19 +153,20 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 			partner_path = ?;
 		`
 		// Reset status to AWAITING_PARTNER even if it was previously something else (re-ingest)
-		_, err = tx.Exec(query, path, size, modTime, StatusAwaitingPartner, partnerPath, StatusAwaitingPartner, partnerPath)
+		_, err = tx.Exec(query, path, size, modTime, StatusAwaitingPartner, pp, StatusAwaitingPartner, pp)
 		if err != nil {
 			return err
 		}
-	} else if err != nil {
-		return err
 	} else {
 		// Partner found!
 		// Logic:
-		// 1. Update ME to PENDING.
-		// 2. Update PARTNER to PENDING (if it was waiting).
+		// 1. Update ME to PENDING. Set my partner_path to the found partner.
+		// 2. Update PARTNER to PENDING. Ensure their partner_path is ME.
 
 		// Insert/Update ME
+		// Note: We always have partnerPath set here.
+		// If !isMeta (Image), we calculated partnerPath.
+		// If isMeta (Json), we retrieved partnerPath from the Image's record.
 		queryMe := `
 		INSERT INTO files (path, size, mod_time, status, partner_path)
 		VALUES (?, ?, ?, ?, ?)
@@ -153,8 +183,11 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 
 		// Update PARTNER
 		// We force it to PENDING so the ingester picks it up.
-		queryPartner := `UPDATE files SET status = ? WHERE id = ?`
-		_, err = tx.Exec(queryPartner, StatusPending, partnerID)
+		// CRITICAL: We also update partner_path.
+		// If Image arrived first: It set partner_path = Meta.json. (Correct)
+		// If Meta arrived first: It set partner_path = NULL. We MUST update it to Image.path (ME).
+		queryPartner := `UPDATE files SET status = ?, partner_path = ? WHERE id = ?`
+		_, err = tx.Exec(queryPartner, StatusPending, path, partnerID)
 		if err != nil {
 			return err
 		}
