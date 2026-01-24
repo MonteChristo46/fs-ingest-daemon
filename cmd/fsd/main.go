@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/user"
 	"path/filepath"
 
 	"fs-ingest-daemon/internal/cli"
@@ -14,6 +15,17 @@ import (
 
 	"github.com/kardianos/service"
 )
+
+func isRoot() bool {
+	u, err := user.Current()
+	if err != nil {
+		return false
+	}
+	// Windows doesn't strictly use Uid "0" for admin, but for service installation checks
+	// usually 'kardianos/service' handles the specifics.
+	// For simple "mode" detection:
+	return u.Uid == "0"
+}
 
 func main() {
 	// 1. Load Config early to get LogPath
@@ -35,9 +47,13 @@ func main() {
 		DisplayName: "FS Ingest Daemon",
 		Description: "Watches directories and uploads files to the cloud.",
 		Arguments:   []string{"run"},
-		Option: service.KeyValue{
+	}
+
+	// If not root, force User Service mode
+	if !isRoot() {
+		svcConfig.Option = service.KeyValue{
 			"UserService": true,
-		},
+		}
 	}
 
 	// Create the daemon instance (implements service.Interface)

@@ -8,7 +8,7 @@ if ! pgrep -x "fsd" > /dev/null; then
 fi
 
 # Configuration
-ROOT_DIR=${1:-"./fsd-watch"}
+ROOT_DIR=${1:-"$HOME/fsd/data"}
 TEST_DATA_DIR=${2:-"./test-data"}
 NUM_CAMS=${3:-5}
 FILES_PER_CAM=${4:-20}
@@ -86,6 +86,7 @@ for ((i=1; i<=NUM_CAMS; i++)); do
         # Copy context file if it exists, replacing extension with .json
         if [ -f "$CTX_SOURCE" ]; then
             JSON_PATH="${FILE_PATH%.*}.json"
+            mkdir -p "$(dirname "$JSON_PATH")" # Ensure directory exists
             cp "$CTX_SOURCE" "$JSON_PATH"
         fi
 

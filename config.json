@@ -1,6 +1,6 @@
 {
   "device_id": "d6:76:9c:79:a2:fb",
-  "endpoint": "http://localhost:8000",
+  "endpoint": "https://glitch-hunt-ingestion.my-basement.cloud",
   "max_data_size_gb": 1,
   "watch_path": "/Users/danielhoschele/Desktop/source-tree/fs-ingest-daemon/fsd-watch",
   "log_path": "/Users/danielhoschele/Desktop/source-tree/fs-ingest-daemon/fsd.log",
@@ -14,6 +14,6 @@
   "debounce_duration": "50ms",
   "orphan_check_interval": "5m",
   "metadata_update_interval": "24h",
-  "auth_token": "ZrHqJDh-16PRDKih18XAT-_EXw9h27sAajHGYI0y_hI",
-  "web_client_url": "http://localhost:8001"
+  "auth_token": "",
+  "web_client_url": "https://glitch-hunt.my-basement.cloud"
 }

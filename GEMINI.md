@@ -11,7 +11,7 @@ The primary goal of fs-ingest-daemon is to provide a zero-dependency, resilient 
 - Since we want to transfer a couple of images per second you try to keep the http connection open. HTTPS:// Handshakes are expensive. 
 - When interacting with the API you must adhere to the @openapi.json
 - When dealing with API addresses, URI you must use env files. 
-- The app must be highly configurable means - config values must be managed in @internal/config/config.go
+- The app must be highly configurable means - config values must be managed in @internal/config/config.go. 
 
 ## In-Scope (The "Must-Haves")
 Platform Portability: Native execution on Windows (x64) and Linux (x64/ARM) without requiring pre-installed runtimes (Python/Node). We will use kardianos

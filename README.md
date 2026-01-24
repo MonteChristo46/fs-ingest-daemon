@@ -26,92 +26,97 @@ The daemon operates with four main concurrent components:
     *   Confirms the upload with the API and marks the file as `UPLOADED`.
 4.  **Pruner:** Monitors local disk usage. If the watched directory size exceeds the configured `max_data_size_gb`, it deletes the Least Recently Modified (LRM) files that have been successfully `UPLOADED`, freeing up space for new data.
 
-## Getting Started
+## Installation
 
-### Prerequisites
+**fs-ingest-daemon** is a single-binary application that handles its own setup. It supports two installation modes:
 
-*   Go 1.24 or higher (for building from source)
+1.  **System Service (Recommended):** Runs as a background service on system boot. Requires Administrator/Root privileges. Default path: `/opt/fsd` or `C:\ProgramData\fsd`.
+2.  **User Service:** Runs as a background agent only when the specific user logs in. No special privileges required. Default path: `~/fsd`.
 
-### Building the Binary
+### Linux / macOS
 
+**Option A: System Service (Admin)**
+*Best for headless servers and edge devices.*
 ```bash
-go build -o fsd cmd/fsd/main.go
-```
-
-### Configuration
-
-On the first run, the daemon generates a `config.json` file in the same directory as the binary. You can also create it manually.
-
-**Default `config.json`:**
-```json
-{
-  "device_id": "dev-001",
-  "endpoint": "http://localhost:8000",
-  "max_data_size_gb": 1,
-  "watch_path": "./data",
-  "log_path": "./fsd.log",
-  "db_path": "./fsd.db",
-  "ingest_check_interval": "2s",
-  "ingest_batch_size": 10,
-  "prune_check_interval": "1m",
-  "prune_batch_size": 50,
-  "api_timeout": "30s"
-}
-```
-
-**Parameters:**
-
-| Parameter | Description | Default |
-| :--- | :--- | :--- |
-| `device_id` | Unique identifier for this edge device used in API requests. | `"dev-001"` |
-| `endpoint` | Base URL of the Ingestion API. | `"http://localhost:8080"` |
-| `watch_path` | Local directory to recursively watch for new files. | `"./data"` |
-| `max_data_size_gb` | Disk usage threshold (GB) for the `watch_path`. Pruning triggers if exceeded. | `1.0` |
-| `log_path` | Path to the application log file. | `"./fsd.log"` |
-| `db_path` | Path to the SQLite state database. | `"./fsd.db"` |
-| `ingest_check_interval` | How frequently the daemon checks for `PENDING` files to upload (e.g., "2s", "500ms"). | `"2s"` |
-| `ingest_batch_size` | Maximum number of files to process in a single upload cycle. | `10` |
-| `prune_check_interval` | How frequently the daemon checks disk usage (e.g., "1m", "30s"). | `"1m"` |
-| `prune_batch_size` | Maximum number of files to delete in a single pruning cycle. | `50` |
-| `api_timeout` | HTTP timeout for API requests (e.g., "30s"). | `"30s"` |
-
-### CLI Usage
-
-The daemon includes a built-in CLI for easy management.
-
-**Run in foreground (for testing):**
-```bash
-./fsd run
-```
-
-**Install as a system service:**
-```bash
+chmod +x fsd
 sudo ./fsd install
 ```
 
-**Start the service:**
+**Option B: User Service (Non-Admin)**
+*Best for personal development machines or locked-down environments.*
 ```bash
-sudo ./fsd start
+chmod +x fsd
+./fsd install
 ```
 
-**Check service status:**
+### Windows
+
+**Option A: System Service (Admin)**
+*Best for production deployments.*
+1.  Open PowerShell as **Administrator**.
+2.  Run:
+    ```powershell
+    .\fsd.exe install
+    ```
+
+**Option B: User Service (Non-Admin)**
+*Best for testing without admin rights.*
+1.  Open a standard PowerShell window.
+2.  Run:
+    ```powershell
+    .\fsd.exe install
+    ```
+
+### Interactive Setup
+The installer will verify your environment and guide you through:
+1.  **Location:** Confirms the install directory based on your permissions (System vs. User path).
+2.  **Config:** Prompts for your `Device ID` and `API Endpoint`.
+3.  **Pairing:** If the device is new, a QR code will appear. Scan it with the web app to claim the device.
+4.  **Service:** The daemon registers itself with the OS and starts automatically.
+
+### 3. Management
+Once installed, use the CLI to manage the service:
+
 ```bash
-sudo ./fsd status
+# Check status
+fsd status
+
+# View live logs
+fsd logs
+
+# Stop/Start service
+sudo fsd stop
+sudo fsd start
+
+# Uninstall (Preserves data)
+sudo fsd uninstall
 ```
 
-**View logs:**
-```bash
-./fsd logs
-```
+## Configuration
 
-**Stop the service:**
-```bash
-sudo ./fsd stop
-```
+The configuration file is generated at install time (e.g., `/opt/fsd/config.json`). You can edit this file manually to tune advanced settings.
 
-**Uninstall the service:**
+**Key Parameters:**
+
+| Parameter | Description | Default |
+| :--- | :--- | :--- |
+| `device_id` | Unique identifier used in API requests. | `(User Input)` |
+| `endpoint` | Base URL of the Ingestion API. | `(User Input)` |
+| `watch_path` | Directory to watch for new files. | `[InstallDir]/data` |
+| `max_data_size_gb` | Disk usage threshold (GB) before pruning triggers. | `1.0` |
+| `ingest_check_interval` | Polling frequency for new files. | `"20ms"` |
+| `ingest_worker_count` | Number of concurrent upload workers. | `5` |
+
+## Building from Source
+
+If you are a developer contributing to the project:
+
 ```bash
-sudo ./fsd uninstall
+# Build the binary
+go build -o fsd cmd/fsd/main.go
+
+# Run locally (Foreground)
+./fsd run
 ```
 
 ## Project Structure

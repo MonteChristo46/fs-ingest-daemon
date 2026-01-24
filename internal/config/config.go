@@ -31,27 +31,43 @@ type Config struct {
 	WebClientURL           string  `json:"web_client_url"`           // URL where the user claims the device
 }
 
+var (
+	// Default configuration values
+	DefaultEndpoint               = "https://glitch-hunt-ingestion.my-basement.cloud"
+	DefaultWebClientURL           = "http://glitch-hunt.my-basement.cloud"
+	DefaultMaxDataSizeGB          = 1.0
+	DefaultIngestCheckInterval    = "20ms"
+	DefaultIngestBatchSize        = 10
+	DefaultIngestWorkerCount      = 5
+	DefaultPruneCheckInterval     = "1m"
+	DefaultPruneBatchSize         = 50
+	DefaultAPITimeout             = "30s"
+	DefaultDebounceDuration       = "500ms"
+	DefaultOrphanCheckInterval    = "5m"
+	DefaultMetadataUpdateInterval = "24h"
+)
+
 // Load reads the configuration from the specified path.
 // If the file does not exist, it returns a default configuration structure.
 func Load(path string) (*Config, error) {
 	// Initialize with sensible defaults
 	cfg := &Config{
 		DeviceID:               "dev-001",
-		Endpoint:               "http://localhost:8000",
-		MaxDataSizeGB:          1.0,
+		Endpoint:               DefaultEndpoint,
+		MaxDataSizeGB:          DefaultMaxDataSizeGB,
 		WatchPath:              "./data",
 		LogPath:                "./fsd.log",
 		DBPath:                 "./fsd.db",
-		IngestCheckInterval:    "20ms",
-		IngestBatchSize:        10,
-		IngestWorkerCount:      5,
-		PruneCheckInterval:     "1m",
-		PruneBatchSize:         50,
-		APITimeout:             "30s",
-		DebounceDuration:       "500ms",
-		OrphanCheckInterval:    "5m",
-		MetadataUpdateInterval: "24h",
-		WebClientURL:           "http://localhost:5173",
+		IngestCheckInterval:    DefaultIngestCheckInterval,
+		IngestBatchSize:        DefaultIngestBatchSize,
+		IngestWorkerCount:      DefaultIngestWorkerCount,
+		PruneCheckInterval:     DefaultPruneCheckInterval,
+		PruneBatchSize:         DefaultPruneBatchSize,
+		APITimeout:             DefaultAPITimeout,
+		DebounceDuration:       DefaultDebounceDuration,
+		OrphanCheckInterval:    DefaultOrphanCheckInterval,
+		MetadataUpdateInterval: DefaultMetadataUpdateInterval,
+		WebClientURL:           DefaultWebClientURL,
 	}
 
 	f, err := os.Open(path)
