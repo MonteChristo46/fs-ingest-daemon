@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"fs-ingest-daemon/internal/api"
 	"fs-ingest-daemon/internal/config"
 	"fs-ingest-daemon/internal/ingest"
 	"fs-ingest-daemon/internal/pruner"
 	"fs-ingest-daemon/internal/store"
+	"fs-ingest-daemon/internal/sysinfo"
 	"fs-ingest-daemon/internal/watcher"
 
 	"github.com/kardianos/service"
@@ -22,6 +24,7 @@ type Daemon struct {
 	Logger      *slog.Logger
 	Cfg         *config.Config
 	DbStore     *store.Store
+	ApiClient   *api.Client
 	PrunerSvc   *pruner.Pruner
 	IngesterSvc *ingest.Ingester
 	WatcherSvc  *watcher.Watcher
@@ -56,15 +59,18 @@ func (d *Daemon) Start(s service.Service) error {
 		return fmt.Errorf("failed to init store at %s: %v", d.Cfg.DBPath, err)
 	}
 
-	// 3. Start Pruner
+	// 3. Initialize API Client
+	d.ApiClient = api.NewClient(d.Cfg.Endpoint, d.Cfg.APITimeout)
+
+	// 4. Start Pruner
 	d.PrunerSvc = pruner.NewPruner(d.Cfg, d.DbStore, d.Logger)
 	d.PrunerSvc.Start()
 
-	// 4. Start Ingester
+	// 5. Start Ingester
 	d.IngesterSvc = ingest.NewIngester(d.Cfg, d.DbStore, d.Logger)
 	d.IngesterSvc.Start()
 
-	// 5. Start Watcher
+	// 6. Start Watcher
 	if err := os.MkdirAll(d.Cfg.WatchPath, 0755); err != nil {
 		return fmt.Errorf("failed to create watch dir: %v", err)
 	}
@@ -82,11 +88,14 @@ func (d *Daemon) Start(s service.Service) error {
 		return fmt.Errorf("failed to start watcher: %v", err)
 	}
 
-	// 6. Initial Scan to catch files created while daemon was offline
+	// 7. Initial Scan to catch files created while daemon was offline
 	go d.scanExistingFiles()
 
-	// 7. Start Orphan Checker
+	// 8. Start Orphan Checker
 	go d.orphanChecker()
+
+	// 9. Start Metadata Updater
+	go d.metadataUpdater()
 
 	if d.Logger != nil {
 		d.Logger.Info("FS Ingest Daemon Started")
@@ -94,6 +103,53 @@ func (d *Daemon) Start(s service.Service) error {
 	}
 
 	return nil
+}
+
+// metadataUpdater runs periodically to collect and send system metadata.
+func (d *Daemon) metadataUpdater() {
+	interval, err := time.ParseDuration(d.Cfg.MetadataUpdateInterval)
+	if err != nil {
+		if d.Logger != nil {
+			d.Logger.Error("Invalid metadata update interval, defaulting to 24h", "error", err)
+		}
+		interval = 24 * time.Hour
+	}
+
+	// Wait a bit before the first run to allow the system to stabilize
+	time.Sleep(10 * time.Second)
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	update := func() {
+		info, err := sysinfo.Collect()
+		if err != nil {
+			if d.Logger != nil {
+				d.Logger.Error("Failed to collect system info", "error", err)
+			}
+			return
+		}
+
+		if _, err := d.ApiClient.UpdateDeviceMetadata(d.Cfg.DeviceID, info); err != nil {
+			if d.Logger != nil {
+				d.Logger.Error("Failed to update device metadata", "error", err)
+			}
+		} else {
+			if d.Logger != nil {
+				d.Logger.Info("Device metadata updated successfully")
+			}
+		}
+	}
+
+	// Run immediately once
+	update()
+
+	for {
+		select {
+		case <-ticker.C:
+			update()
+		}
+	}
 }
 
 // orphanChecker runs periodically to mark timed-out files as ORPHAN.

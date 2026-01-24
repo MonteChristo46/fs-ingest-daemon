@@ -67,3 +67,11 @@ type PairingStatusResponse struct {
 	Status PairingStatus `json:"status"` // WAITING, CLAIMED, EXPIRED
 	APIKey *string       `json:"apikey"` // The API Key if claimed
 }
+
+// DeviceRead represents the device information returned by the API.
+type DeviceRead struct {
+	DeviceID  string                 `json:"device_id"`
+	AccountID string                 `json:"account_id"`
+	IsActive  bool                   `json:"is_active"`
+	Metadata  map[string]interface{} `json:"metadata"`
+}

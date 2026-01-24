@@ -151,3 +151,36 @@ func (c *Client) CheckPairingStatus(deviceID string, code string) (*PairingStatu
 
 	return &statusResp, nil
 }
+
+// UpdateDeviceMetadata updates the metadata for the specified device.
+func (c *Client) UpdateDeviceMetadata(deviceID string, metadata map[string]interface{}) (*DeviceRead, error) {
+	body, err := json.Marshal(metadata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/v1/devices/%s/metadata", c.BaseURL, deviceID)
+	req, err := http.NewRequest(http.MethodPatch, url, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create patch request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send metadata update request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("metadata update failed with status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var deviceRead DeviceRead
+	if err := json.NewDecoder(resp.Body).Decode(&deviceRead); err != nil {
+		return nil, fmt.Errorf("failed to decode device read response: %w", err)
+	}
+
+	return &deviceRead, nil
+}

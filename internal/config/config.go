@@ -12,22 +12,23 @@ import (
 
 // Config represents the application configuration structure.
 type Config struct {
-	DeviceID            string  `json:"device_id"`             // Unique identifier for the device (e.g., "dev-001")
-	Endpoint            string  `json:"endpoint"`              // The API base URL
-	MaxDataSizeGB       float64 `json:"max_data_size_gb"`      // Maximum allowed size for the local storage in GB before pruning kicks in
-	WatchPath           string  `json:"watch_path"`            // The local directory path to watch for new files
-	LogPath             string  `json:"log_path"`              // Path to the log file
-	DBPath              string  `json:"db_path"`               // Path to the SQLite database
-	IngestCheckInterval string  `json:"ingest_check_interval"` // Duration string (e.g. "2s") for ingest polling
-	IngestBatchSize     int     `json:"ingest_batch_size"`     // Number of files to process per ingest tick
-	IngestWorkerCount   int     `json:"ingest_worker_count"`   // Number of concurrent upload workers
-	PruneCheckInterval  string  `json:"prune_check_interval"`  // Duration string (e.g. "1m") for prune checks
-	PruneBatchSize      int     `json:"prune_batch_size"`      // Number of files to prune per tick
-	APITimeout          string  `json:"api_timeout"`           // HTTP Client timeout duration string
-	DebounceDuration    string  `json:"debounce_duration"`     // Duration string (e.g. "500ms") for watcher debounce
-	OrphanCheckInterval string  `json:"orphan_check_interval"` // Duration string (e.g. "5m") for orphan checks
-	AuthToken           string  `json:"auth_token"`            // Token indicating the device is registered (or empty if not)
-	WebClientURL        string  `json:"web_client_url"`        // URL where the user claims the device
+	DeviceID               string  `json:"device_id"`                // Unique identifier for the device (e.g., "dev-001")
+	Endpoint               string  `json:"endpoint"`                 // The API base URL
+	MaxDataSizeGB          float64 `json:"max_data_size_gb"`         // Maximum allowed size for the local storage in GB before pruning kicks in
+	WatchPath              string  `json:"watch_path"`               // The local directory path to watch for new files
+	LogPath                string  `json:"log_path"`                 // Path to the log file
+	DBPath                 string  `json:"db_path"`                  // Path to the SQLite database
+	IngestCheckInterval    string  `json:"ingest_check_interval"`    // Duration string (e.g. "2s") for ingest polling
+	IngestBatchSize        int     `json:"ingest_batch_size"`        // Number of files to process per ingest tick
+	IngestWorkerCount      int     `json:"ingest_worker_count"`      // Number of concurrent upload workers
+	PruneCheckInterval     string  `json:"prune_check_interval"`     // Duration string (e.g. "1m") for prune checks
+	PruneBatchSize         int     `json:"prune_batch_size"`         // Number of files to prune per tick
+	APITimeout             string  `json:"api_timeout"`              // HTTP Client timeout duration string
+	DebounceDuration       string  `json:"debounce_duration"`        // Duration string (e.g. "500ms") for watcher debounce
+	OrphanCheckInterval    string  `json:"orphan_check_interval"`    // Duration string (e.g. "5m") for orphan checks
+	MetadataUpdateInterval string  `json:"metadata_update_interval"` // Duration string (e.g. "24h") for device metadata updates
+	AuthToken              string  `json:"auth_token"`               // Token indicating the device is registered (or empty if not)
+	WebClientURL           string  `json:"web_client_url"`           // URL where the user claims the device
 }
 
 // Load reads the configuration from the specified path.
@@ -35,21 +36,22 @@ type Config struct {
 func Load(path string) (*Config, error) {
 	// Initialize with sensible defaults
 	cfg := &Config{
-		DeviceID:            "dev-001",
-		Endpoint:            "http://localhost:8000",
-		MaxDataSizeGB:       1.0,
-		WatchPath:           "./data",
-		LogPath:             "./fsd.log",
-		DBPath:              "./fsd.db",
-		IngestCheckInterval: "20ms",
-		IngestBatchSize:     10,
-		IngestWorkerCount:   5,
-		PruneCheckInterval:  "1m",
-		PruneBatchSize:      50,
-		APITimeout:          "30s",
-		DebounceDuration:    "500ms",
-		OrphanCheckInterval: "5m",
-		WebClientURL:        "http://localhost:5173",
+		DeviceID:               "dev-001",
+		Endpoint:               "http://localhost:8000",
+		MaxDataSizeGB:          1.0,
+		WatchPath:              "./data",
+		LogPath:                "./fsd.log",
+		DBPath:                 "./fsd.db",
+		IngestCheckInterval:    "20ms",
+		IngestBatchSize:        10,
+		IngestWorkerCount:      5,
+		PruneCheckInterval:     "1m",
+		PruneBatchSize:         50,
+		APITimeout:             "30s",
+		DebounceDuration:       "500ms",
+		OrphanCheckInterval:    "5m",
+		MetadataUpdateInterval: "24h",
+		WebClientURL:           "http://localhost:5173",
 	}
 
 	f, err := os.Open(path)
