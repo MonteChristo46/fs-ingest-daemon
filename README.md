@@ -108,7 +108,7 @@ The configuration file is generated at install time (e.g., `/opt/fsd/config.json
 | :--- | :--- | :--- |
 | `device_id` | Unique identifier used in API requests (e.g., "dev-001"). | `(User Input)` |
 | `endpoint` | Base URL of the Ingestion API. | `(User Input)` |
-| `sidecar_strategy` | Pairing strategy. `strict` waits for .json sidecar; `none` uploads standalone files. | `"strict"` |
+| `sidecar_strategy` | Pairing strategy. `strict` waits for .json sidecar; `none` uploads standalone files. | `"none"` |
 | `watch_path` | Local directory path to watch for new files. | `[InstallDir]/data` |
 | `max_data_size_gb` | Maximum allowed size for local storage (GB) before pruning kicks in. | `1.0` |
 | `ingest_check_interval` | Polling frequency for checking new PENDING files. | `"20ms"` |
@@ -121,6 +121,27 @@ The configuration file is generated at install time (e.g., `/opt/fsd/config.json
 | `orphan_check_interval` | Time before a waiting file is marked as ORPHAN (uploaded without partner). | `"5m"` |
 | `metadata_update_interval` | Frequency of sending system info (OS, Uptime, IP) to the API. | `"24h"` |
 | `web_client_url` | URL displayed in the QR code for device claiming. | `(Default Cloud URL)` |
+
+### Changing Configuration
+
+To modify the configuration after installation:
+
+1.  **Locate the config file:**
+    *   **Linux/macOS (System):** `/opt/fsd/config.json`
+    *   **Linux/macOS (User):** `~/fsd/config.json`
+    *   **Windows (System):** `C:\ProgramData\fsd\config.json`
+    *   **Windows (User):** `%USERPROFILE%\fsd\config.json`
+
+2.  **Edit the file:** Open `config.json` in any text editor (requires Admin/Root for system installs).
+
+3.  **Restart the service:** Changes only take effect after a restart.
+    ```bash
+    # Linux / macOS
+    sudo fsd restart
+
+    # Windows (Powershell Admin)
+    fsd restart
+    ```
 
 ## Building from Source
 

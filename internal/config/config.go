@@ -46,7 +46,7 @@ var (
 	DefaultDebounceDuration       = "500ms"
 	DefaultOrphanCheckInterval    = "5m"
 	DefaultMetadataUpdateInterval = "24h"
-	DefaultSidecarStrategy        = "strict"
+	DefaultSidecarStrategy        = "none"
 )
 
 // Load reads the configuration from the specified path.

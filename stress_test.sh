@@ -1,18 +1,40 @@
 #!/bin/bash
 
-# Check if fs-ingest-daemon is running
-if ! pgrep -x "fsd" > /dev/null; then
-    echo "Error: 'fsd' service is NOT running."
-    echo "Please start the daemon first: ./fsd start (or ./fsd run)"
-    exit 1
-fi
-
 # Configuration
 ROOT_DIR=${1:-"$HOME/fsd/data"}
 TEST_DATA_DIR=${2:-"./test-data"}
 NUM_CAMS=${3:-5}
 FILES_PER_CAM=${4:-20}
 DELAY=${5:-0} # Set to 0 for max speed (stress test)
+MODE="" 
+
+# Parse optional arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -m|--mode) MODE="$2"; shift ;;
+        *) ;;
+    esac
+    shift
+done
+
+# Interactive Menu if Mode not set
+if [ -z "$MODE" ]; then
+    echo "Select Test Mode:"
+    echo "1) Strict (Images + JSON Sidecars)"
+    echo "2) None   (Images Only)"
+    read -p "Enter choice [1]: " CHOICE
+    case $CHOICE in
+        2) MODE="none" ;;
+        *) MODE="strict" ;;
+    esac
+fi
+
+# Check if fs-ingest-daemon is running
+if ! pgrep -x "fsd" > /dev/null; then
+    echo "Error: 'fsd' service is NOT running."
+    echo "Please start the daemon first: ./fsd start (or ./fsd run)"
+    exit 1
+fi
 
 echo "------------------------------------------------"
 echo "FS Ingest Daemon - Stress Test Generator"
@@ -22,6 +44,7 @@ echo "Source: $TEST_DATA_DIR"
 echo "Cameras: $NUM_CAMS"
 echo "Files/Cam: $FILES_PER_CAM"
 echo "Delay: ${DELAY}s"
+echo "Mode: $MODE"
 echo "------------------------------------------------"
 
 # Check source images
@@ -30,22 +53,26 @@ if [ ! -d "$TEST_DATA_DIR" ]; then
     exit 1
 fi
 
-# Load images into array (looking into images subdirectory)
-IMAGE_DIR="$TEST_DATA_DIR/images"
+# Load images from mvtec dataset recursively if available
+IMAGES=()
+while IFS=  read -r -d $'\0'; do
+    IMAGES+=("$REPLY")
+done < <(find "$TEST_DATA_DIR/mvtec_anomaly_detection" -type f \( -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" \) -print0 2>/dev/null)
 
-if [ ! -d "$IMAGE_DIR" ]; then
-    echo "Error: Image directory '$IMAGE_DIR' does not exist."
-    exit 1
+# Fallback to simple images folder if mvtec not found
+if [ ${#IMAGES[@]} -eq 0 ]; then
+    IMAGE_DIR="$TEST_DATA_DIR/images"
+    if [ -d "$IMAGE_DIR" ]; then
+        shopt -s nullglob
+        IMAGES=("$IMAGE_DIR"/*.png "$IMAGE_DIR"/*.jpg "$IMAGE_DIR"/*.jpeg)
+        shopt -u nullglob
+    fi
 fi
-
-shopt -s nullglob
-IMAGES=("$IMAGE_DIR"/*.png "$IMAGE_DIR"/*.jpg "$IMAGE_DIR"/*.jpeg)
-shopt -u nullglob
 
 NUM_IMAGES=${#IMAGES[@]}
 
 if [ "$NUM_IMAGES" -eq 0 ]; then
-    echo "Error: No image files (png/jpg/jpeg) found in '$IMAGE_DIR'."
+    echo "Error: No image files found in '$TEST_DATA_DIR' (checked mvtec_anomaly_detection and images/)."
     exit 1
 fi
 
@@ -78,16 +105,18 @@ for ((i=1; i<=NUM_CAMS; i++)); do
         # Copy file
         cp "$SOURCE_FILE" "$FILE_PATH"
 
-        # Create Random Context File
-        # Randomly select context_1.json or context_2.json
-        RAND_CTX=$(( RANDOM % 2 + 1 ))
-        CTX_SOURCE="$TEST_DATA_DIR/context_${RAND_CTX}.json"
-        
-        # Copy context file if it exists, replacing extension with .json
-        if [ -f "$CTX_SOURCE" ]; then
-            JSON_PATH="${FILE_PATH%.*}.json"
-            mkdir -p "$(dirname "$JSON_PATH")" # Ensure directory exists
-            cp "$CTX_SOURCE" "$JSON_PATH"
+        # Create Context File (Only in strict mode)
+        if [ "$MODE" == "strict" ]; then
+            # Randomly select context_1.json or context_2.json
+            RAND_CTX=$(( RANDOM % 2 + 1 ))
+            CTX_SOURCE="$TEST_DATA_DIR/context_${RAND_CTX}.json"
+            
+            # Copy context file if it exists, appending .json (double extension)
+            if [ -f "$CTX_SOURCE" ]; then
+                JSON_PATH="${FILE_PATH}.json"
+                mkdir -p "$(dirname "$JSON_PATH")" # Ensure directory exists
+                cp "$CTX_SOURCE" "$JSON_PATH"
+            fi
         fi
 
         # Optional: Print progress every 10 files

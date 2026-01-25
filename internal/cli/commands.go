@@ -71,6 +71,19 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 		},
 	}
 
+	var restartCmd = &cobra.Command{
+		Use:   "restart",
+		Short: "Restart the service",
+		Run: func(cmd *cobra.Command, args []string) {
+			err := s.Restart()
+			if err != nil {
+				fmt.Printf("Failed to restart: %s\n", err)
+				return
+			}
+			fmt.Println("Service restarted.")
+		},
+	}
+
 	var runCmd = &cobra.Command{
 		Use:   "run",
 		Short: "Run the service in foreground",
@@ -133,6 +146,7 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 		uninstallCmd,
 		startCmd,
 		stopCmd,
+		restartCmd,
 		runCmd,
 		statusCmd,
 		logsCmd,

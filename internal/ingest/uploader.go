@@ -88,6 +88,9 @@ func (u *Uploader) Process(f store.FileRecord) {
 
 	// 2. Extract Metadata and Context based on directory structure
 	context, meta := util.ExtractMetadata(u.cfg.WatchPath, f.Path)
+	if context == nil {
+		context = []string{}
+	}
 
 	// 3. Ingest Request - Ask API for permission and upload URL
 	req := api.IngestRequest{
