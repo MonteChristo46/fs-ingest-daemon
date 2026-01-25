@@ -89,19 +89,17 @@ func main() {
 		logPath = filepath.Join(filepath.Dir(ex), "fsd.log")
 	}
 
-	// Open file for appending, create if not exists
-	logFile, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		// Fallback to stderr if file cannot be opened
-		log.Printf("Failed to open log file: %v\n", err)
-	} else {
-		defer logFile.Close()
+	// Initialize LogRotator
+	rotator := &fsdlog.LogRotator{
+		Filename:   logPath,
+		MaxSizeMB:  cfg.LogMaxSizeMB,
+		MaxBackups: cfg.LogMaxBackups,
+		MaxAgeDays: cfg.LogMaxAgeDays,
+		Compress:   cfg.LogCompress,
 	}
 
-	var logWriter io.Writer = logFile
-	if logFile == nil {
-		logWriter = os.Stderr
-	}
+	// Use rotator as the writer
+	var logWriter io.Writer = rotator
 
 	logger := fsdlog.Setup(sysLogger, logWriter)
 
@@ -114,4 +112,7 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+
+	// Close rotator on exit (though main usually just exits)
+	_ = rotator.Close()
 }

@@ -121,6 +121,10 @@ The configuration file is generated at install time (e.g., `/opt/fsd/config.json
 | `orphan_check_interval` | Time before a waiting file is marked as ORPHAN (uploaded without partner). | `"5m"` |
 | `metadata_update_interval` | Frequency of sending system info (OS, Uptime, IP) to the API. | `"24h"` |
 | `web_client_url` | URL displayed in the QR code for device claiming. | `(Default Cloud URL)` |
+| `log_max_size_mb` | Max size in MB before log rotation. | `10` |
+| `log_max_backups` | Max number of old log files to retain. | `3` |
+| `log_max_age_days` | Max number of days to retain old log files. | `28` |
+| `log_compress` | Whether to compress old log files (gzip). | `true` |
 
 ### Changing Configuration
 

@@ -30,6 +30,10 @@ type Config struct {
 	AuthToken              string  `json:"auth_token"`               // Token indicating the device is registered (or empty if not)
 	WebClientURL           string  `json:"web_client_url"`           // URL where the user claims the device
 	SidecarStrategy        string  `json:"sidecar_strategy"`         // "strict" (default) or "none" (image only)
+	LogMaxSizeMB           int     `json:"log_max_size_mb"`          // Max size in MB before rotation. Default 10.
+	LogMaxBackups          int     `json:"log_max_backups"`          // Max number of old files to keep. Default 3.
+	LogMaxAgeDays          int     `json:"log_max_age_days"`         // Max number of days to keep old files. Default 28.
+	LogCompress            bool    `json:"log_compress"`             // Whether to compress old files. Default true.
 }
 
 var (
@@ -47,6 +51,10 @@ var (
 	DefaultOrphanCheckInterval    = "5m"
 	DefaultMetadataUpdateInterval = "24h"
 	DefaultSidecarStrategy        = "none"
+	DefaultLogMaxSizeMB           = 10
+	DefaultLogMaxBackups          = 3
+	DefaultLogMaxAgeDays          = 28
+	DefaultLogCompress            = true
 )
 
 // Load reads the configuration from the specified path.
@@ -71,6 +79,10 @@ func Load(path string) (*Config, error) {
 		MetadataUpdateInterval: DefaultMetadataUpdateInterval,
 		WebClientURL:           DefaultWebClientURL,
 		SidecarStrategy:        DefaultSidecarStrategy,
+		LogMaxSizeMB:           DefaultLogMaxSizeMB,
+		LogMaxBackups:          DefaultLogMaxBackups,
+		LogMaxAgeDays:          DefaultLogMaxAgeDays,
+		LogCompress:            DefaultLogCompress,
 	}
 
 	f, err := os.Open(path)

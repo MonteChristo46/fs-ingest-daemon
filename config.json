@@ -16,5 +16,9 @@
   "metadata_update_interval": "24h",
   "auth_token": "",
   "web_client_url": "https://glitch-hunt.my-basement.cloud",
-  "sidecar_strategy": "strict"
+  "sidecar_strategy": "strict",
+  "log_max_size_mb": 10,
+  "log_max_backups": 3,
+  "log_max_age_days": 28,
+  "log_compress": true
 }
