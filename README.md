@@ -10,21 +10,27 @@
 *   **Smart Pruning:** Lifecycle-based eviction strategy ("Genius Pruning") that manages local disk space by removing the oldest uploaded files when limits are reached.
 *   **Resilient Connectivity:** Buffers data locally during network outages and retries uploads automatically.
 *   **Contextual Intelligence:** Automatically extracts metadata and context tags from the directory hierarchy (e.g., `cam_1/2026/01/06/...`).
+*   **Flexible Pairing:** Configurable sidecar strategy (`strict` vs `none`) to support both metadata-rich setups and simple image streams.
 
 ## Architecture
 
 The daemon operates with four main concurrent components:
 
-1.  **Watcher:** Recursively watches a target directory for new files. When a file is detected, it is recorded in the local SQLite database with a `PENDING` status.
+1.  **Watcher:** Recursively watches a target directory for new files. When a file is detected, it is recorded in the local SQLite database.
 2.  **Store (SQLite):** A local persistent state store (`fsd.db`) that tracks every file's lifecycle (`PENDING` -> `UPLOADED`) and metadata.
-3.  **Ingester:**
+3.  **Sidecar Logic:**
+    *   **Strict Mode:** Waits for a companion `.json` file (e.g., `img.png` + `img.png.json`) to arrive.
+    *   **None Mode:** Uploads files immediately as they are detected.
+    *   ![Sidecar Logic](http://www.plantuml.com/plantuml/proxy?cache=no&src=https://raw.githubusercontent.com/user/repo/main/docs/sidecar_logic.plantuml)
+    *   *(See `docs/sidecar_logic.plantuml` for the diagram source)*
+4.  **Ingester:**
     *   Polls for `PENDING` files.
     *   Calculates SHA256 checksums.
     *   Extracts metadata from file paths.
     *   Initiates a handshake with the Cloud API to get a Presigned Upload URL.
     *   Streams the file directly to object storage (S3).
     *   Confirms the upload with the API and marks the file as `UPLOADED`.
-4.  **Pruner:** Monitors local disk usage. If the watched directory size exceeds the configured `max_data_size_gb`, it deletes the Least Recently Modified (LRM) files that have been successfully `UPLOADED`, freeing up space for new data.
+5.  **Pruner:** Monitors local disk usage. If the watched directory size exceeds the configured `max_data_size_gb`, it deletes the Least Recently Modified (LRM) files that have been successfully `UPLOADED`, freeing up space for new data.
 
 ## Installation
 
@@ -96,16 +102,25 @@ sudo fsd uninstall
 
 The configuration file is generated at install time (e.g., `/opt/fsd/config.json`). You can edit this file manually to tune advanced settings.
 
-**Key Parameters:**
+**Configuration Parameters:**
 
 | Parameter | Description | Default |
 | :--- | :--- | :--- |
-| `device_id` | Unique identifier used in API requests. | `(User Input)` |
+| `device_id` | Unique identifier used in API requests (e.g., "dev-001"). | `(User Input)` |
 | `endpoint` | Base URL of the Ingestion API. | `(User Input)` |
-| `watch_path` | Directory to watch for new files. | `[InstallDir]/data` |
-| `max_data_size_gb` | Disk usage threshold (GB) before pruning triggers. | `1.0` |
-| `ingest_check_interval` | Polling frequency for new files. | `"20ms"` |
+| `sidecar_strategy` | Pairing strategy. `strict` waits for .json sidecar; `none` uploads standalone files. | `"strict"` |
+| `watch_path` | Local directory path to watch for new files. | `[InstallDir]/data` |
+| `max_data_size_gb` | Maximum allowed size for local storage (GB) before pruning kicks in. | `1.0` |
+| `ingest_check_interval` | Polling frequency for checking new PENDING files. | `"20ms"` |
+| `ingest_batch_size` | Number of files to process in a single ingest cycle. | `10` |
 | `ingest_worker_count` | Number of concurrent upload workers. | `5` |
+| `prune_check_interval` | Frequency of disk usage checks. | `"1m"` |
+| `prune_batch_size` | Number of files to delete per prune cycle when full. | `50` |
+| `api_timeout` | Timeout duration for HTTP requests to the Cloud API. | `"30s"` |
+| `debounce_duration` | Wait time after file write before processing (prevents partial reads). | `"500ms"` |
+| `orphan_check_interval` | Time before a waiting file is marked as ORPHAN (uploaded without partner). | `"5m"` |
+| `metadata_update_interval` | Frequency of sending system info (OS, Uptime, IP) to the API. | `"24h"` |
+| `web_client_url` | URL displayed in the QR code for device claiming. | `(Default Cloud URL)` |
 
 ## Building from Source
 

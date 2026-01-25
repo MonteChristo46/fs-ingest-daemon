@@ -1,0 +1,51 @@
+@startuml
+skinparam state {
+  BackgroundColor<<Success>> #90EE90
+  BackgroundColor<<Waiting>> #FFFACD
+  BackgroundColor<<Process>> #ADD8E6
+}
+
+title Sidecar Pairing State Machine
+
+' --- State Definitions ---
+
+state "Detected" as Detected
+state "Check Configuration" as ConfigCheck
+state c <<choice>>
+state Uploaded <<Success>>
+
+state AwaitingPartner {
+  state "Waiting for Partner" as Waiting
+  state "Paired" as Paired <<Success>>
+  state "Orphaned" as Orphaned <<Waiting>>
+  
+  [*] --> Waiting : Register in DB
+  Waiting --> Paired : "Partner Arrives\n(Image + .json)"
+  Waiting --> Orphaned : "Timeout Exceeded\n(orphan_check_interval)"
+}
+
+state Pending <<Process>> {
+   state Queued
+   state Uploading
+   
+   [*] --> Queued
+   Queued --> Uploading : Worker Picked Up
+   Uploading --> Queued : "Failure (Retry)"
+}
+
+' --- Transitions ---
+
+[*] --> Detected : "File Created"
+Detected --> ConfigCheck
+
+ConfigCheck --> c : sidecar_strategy
+
+c --> Pending : "none\n(Treat as standalone)"
+c --> AwaitingPartner : "strict\n(Expect companion .json)"
+
+Paired --> Pending : "Both Files Ready\n(Context Merged)"
+Orphaned --> Pending : "Process as Single File\n(No Context)"
+
+Uploading --> Uploaded : Success
+
+@enduml

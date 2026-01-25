@@ -6,7 +6,7 @@ package store
 
 import (
 	"database/sql"
-	"path/filepath"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -87,7 +87,7 @@ func (s *Store) migrate() error {
 }
 
 // RegisterFile handles the detection of a new file and attempts to pair it.
-func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta bool) error {
+func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta bool, expectSidecar bool) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -100,36 +100,21 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 	var foundPartner bool
 
 	if !isMeta {
-		// I am an image (data). My partner MUST be my filename with .json extension.
-		// e.g. /path/to/img.png -> /path/to/img.json
-		ext := filepath.Ext(path)
-		// Handle cases with no extension gracefully, though unlikely
-		if len(ext) > 0 {
-			partnerPath = path[:len(path)-len(ext)] + ".json"
-		} else {
-			partnerPath = path + ".json"
-		}
-
-		// Check if my partner (the json file) is already in the DB
-		// Since partner is .json, its path is known.
-		err = tx.QueryRow("SELECT id, status FROM files WHERE path = ?", partnerPath).Scan(&partnerID, &partnerStatus)
-		if err == nil {
-			foundPartner = true
-		} else if err != sql.ErrNoRows {
-			return err
-		}
-
+		// I am an image (data). My partner MUST be my filename + .json
+		// e.g. /path/to/img.png -> /path/to/img.png.json
+		partnerPath = path + ".json"
 	} else {
-		// I am metadata (.json). I don't know my partner's extension.
-		// e.g. /path/to/img.json -> could be img.png, img.jpg, img.jpeg...
-		// But if my partner arrived first, they would have calculated MY path as their 'partner_path'.
-		// So I search for the record that claims me as a partner.
-		err = tx.QueryRow("SELECT id, status, path FROM files WHERE partner_path = ?", path).Scan(&partnerID, &partnerStatus, &partnerPath)
-		if err == nil {
-			foundPartner = true
-		} else if err != sql.ErrNoRows {
-			return err
-		}
+		// I am metadata (.json). My partner MUST be my filename without .json
+		// e.g. /path/to/img.png.json -> /path/to/img.png
+		partnerPath = strings.TrimSuffix(path, ".json")
+	}
+
+	// Check if my partner is already in the DB
+	err = tx.QueryRow("SELECT id, status FROM files WHERE path = ?", partnerPath).Scan(&partnerID, &partnerStatus)
+	if err == nil {
+		foundPartner = true
+	} else if err != sql.ErrNoRows {
+		return err
 	}
 
 	if !foundPartner {
@@ -143,6 +128,12 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 			pp.Valid = true
 		}
 
+		// Determine initial status based on configuration
+		initialStatus := StatusAwaitingPartner
+		if !isMeta && !expectSidecar {
+			initialStatus = StatusPending
+		}
+
 		query := `
 		INSERT INTO files (path, size, mod_time, status, partner_path)
 		VALUES (?, ?, ?, ?, ?)
@@ -152,8 +143,8 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 			status = ?,
 			partner_path = ?;
 		`
-		// Reset status to AWAITING_PARTNER even if it was previously something else (re-ingest)
-		_, err = tx.Exec(query, path, size, modTime, StatusAwaitingPartner, pp, StatusAwaitingPartner, pp)
+		// Reset status to initialStatus even if it was previously something else (re-ingest)
+		_, err = tx.Exec(query, path, size, modTime, initialStatus, pp, initialStatus, pp)
 		if err != nil {
 			return err
 		}
@@ -211,7 +202,7 @@ func (s *Store) MarkOrphans(timeout time.Duration) error {
 // AddOrUpdateFile inserts a new file or updates an existing one.
 // Deprecated: Use RegisterFile for pairing logic.
 func (s *Store) AddOrUpdateFile(path string, size int64, modTime time.Time) error {
-	return s.RegisterFile(path, size, modTime, false)
+	return s.RegisterFile(path, size, modTime, false, true)
 }
 
 // MarkUploaded updates the status of a file to UPLOADED and sets the uploaded_at timestamp.

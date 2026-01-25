@@ -201,7 +201,12 @@ func (d *Daemon) processFile(path string) {
 	// Check extension to determine if it is metadata
 	isMeta := filepath.Ext(path) == ".json"
 
-	if err := d.DbStore.RegisterFile(path, info.Size(), info.ModTime(), isMeta); err != nil {
+	expectSidecar := true
+	if d.Cfg.SidecarStrategy == "none" {
+		expectSidecar = false
+	}
+
+	if err := d.DbStore.RegisterFile(path, info.Size(), info.ModTime(), isMeta, expectSidecar); err != nil {
 		if d.Logger != nil {
 			d.Logger.Error("db error", "error", err)
 		}

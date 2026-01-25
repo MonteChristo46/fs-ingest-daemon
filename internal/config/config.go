@@ -29,6 +29,7 @@ type Config struct {
 	MetadataUpdateInterval string  `json:"metadata_update_interval"` // Duration string (e.g. "24h") for device metadata updates
 	AuthToken              string  `json:"auth_token"`               // Token indicating the device is registered (or empty if not)
 	WebClientURL           string  `json:"web_client_url"`           // URL where the user claims the device
+	SidecarStrategy        string  `json:"sidecar_strategy"`         // "strict" (default) or "none" (image only)
 }
 
 var (
@@ -45,6 +46,7 @@ var (
 	DefaultDebounceDuration       = "500ms"
 	DefaultOrphanCheckInterval    = "5m"
 	DefaultMetadataUpdateInterval = "24h"
+	DefaultSidecarStrategy        = "strict"
 )
 
 // Load reads the configuration from the specified path.
@@ -68,6 +70,7 @@ func Load(path string) (*Config, error) {
 		OrphanCheckInterval:    DefaultOrphanCheckInterval,
 		MetadataUpdateInterval: DefaultMetadataUpdateInterval,
 		WebClientURL:           DefaultWebClientURL,
+		SidecarStrategy:        DefaultSidecarStrategy,
 	}
 
 	f, err := os.Open(path)
