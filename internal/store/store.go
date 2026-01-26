@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // FileStatus represents the processing state of a file.
@@ -41,7 +41,8 @@ type Store struct {
 // NewStore initializes the SQLite database connection and runs migrations.
 func NewStore(dbPath string) (*Store, error) {
 	// WAL mode is much better for concurrent access
-	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL")
+	// modernc.org/sqlite uses "sqlite" as driver name
+	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
 	if err != nil {
 		return nil, err
 	}
