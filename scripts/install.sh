@@ -67,6 +67,15 @@ fi
 
 chmod +x "$TARGET"
 
+# macOS (Darwin) Fix: Apply ad-hoc signature to prevent "Killed: 9"
+if [ "$(uname -s)" = "Darwin" ]; then
+    echo "🍎 Applying macOS security fix (ad-hoc signing)..."
+    # Remove quarantine attribute if present
+    xattr -d com.apple.quarantine "$TARGET" 2>/dev/null || true
+    # Force ad-hoc signing
+    codesign --force --deep -s - "$TARGET"
+fi
+
 # Symlink to PATH
 if [ -n "$SYMLINK_DIR" ]; then
     echo "Symlinking to $SYMLINK_PATH..."
