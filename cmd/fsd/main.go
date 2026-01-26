@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 
 	"fs-ingest-daemon/internal/cli"
 	"fs-ingest-daemon/internal/config"
@@ -17,13 +18,14 @@ import (
 )
 
 func isRoot() bool {
+	if runtime.GOOS == "windows" {
+		_, err := os.Open("\\\\.\\PHYSICALDRIVE0")
+		return err == nil
+	}
 	u, err := user.Current()
 	if err != nil {
 		return false
 	}
-	// Windows doesn't strictly use Uid "0" for admin, but for service installation checks
-	// usually 'kardianos/service' handles the specifics.
-	// For simple "mode" detection:
 	return u.Uid == "0"
 }
 
