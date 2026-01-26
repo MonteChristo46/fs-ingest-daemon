@@ -332,8 +332,17 @@ func InstallCmd(s service.Service) *cobra.Command {
 				// We are already in the right place, just install
 				fmt.Println("-> Registering service...")
 				if err := s.Install(); err != nil {
-					fmt.Printf("❌ Service install failed: %v\n", err)
-					// Don't return, maybe it's already installed
+					if strings.Contains(err.Error(), "already exists") {
+						fmt.Println("   Service definition already exists. Reinstalling...")
+						_ = s.Uninstall() // Ignore uninstall error, just try to clear it
+						if err := s.Install(); err != nil {
+							fmt.Printf("❌ Service reinstall failed: %v\n", err)
+						} else {
+							fmt.Println("✅ Service re-registered.")
+						}
+					} else {
+						fmt.Printf("❌ Service install failed: %v\n", err)
+					}
 				}
 			}
 
