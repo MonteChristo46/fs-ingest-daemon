@@ -34,41 +34,36 @@ The daemon operates with four main concurrent components:
 
 ## Installation
 
-**fs-ingest-daemon** is a single-binary application that handles its own setup. It supports two installation modes:
+**fs-ingest-daemon** handles its own setup. You can install it with a single command or manually.
 
-1.  **System Service (Recommended):** Runs as a background service on system boot. Requires Administrator/Root privileges. Default path: `/opt/fsd` or `C:\ProgramData\fsd`.
-2.  **User Service:** Runs as a background agent only when the specific user logs in. No special privileges required. Default path: `~/fsd`.
+### Quick Install (Recommended)
 
-### Linux / macOS
+These commands automatically download the latest binary, install it to the system path, and start the interactive setup.
 
-**Option A: System Service (Admin)**
-*Best for headless servers and edge devices.*
+**Linux / macOS**
 ```bash
-chmod +x fsd
-sudo ./fsd install
+curl -sfL https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/install.sh | sudo sh
 ```
 
-**Option B: User Service (Non-Admin)**
-*Best for personal development machines or locked-down environments.*
-```bash
-chmod +x fsd
-./fsd install
+**Windows (PowerShell Admin)**
+```powershell
+iwr -useb https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/install.ps1 | iex
 ```
 
-### Windows
+### Manual Installation
 
-**Option A: System Service (Admin)**
-*Best for production deployments.*
-1.  Open PowerShell as **Administrator**.
-2.  Run:
-    ```powershell
-    .\fsd.exe install
+If you prefer to download the binary manually:
+
+1.  **Download** the latest binary for your OS from the [Releases](https://github.com/MonteChristo46/fs-ingest-daemon/releases) page.
+2.  **Run the installer**:
+
+    **Linux / macOS**
+    ```bash
+    chmod +x fsd
+    sudo ./fsd install
     ```
 
-**Option B: User Service (Non-Admin)**
-*Best for testing without admin rights.*
-1.  Open a standard PowerShell window.
-2.  Run:
+    **Windows (PowerShell Admin)**
     ```powershell
     .\fsd.exe install
     ```
@@ -80,7 +75,23 @@ The installer will verify your environment and guide you through:
 3.  **Pairing:** If the device is new, a QR code will appear. Scan it with the web app to claim the device.
 4.  **Service:** The daemon registers itself with the OS and starts automatically.
 
-### 3. Management
+### Uninstallation
+
+To cleanly remove the service, data, and binary:
+
+**Linux / macOS**
+```bash
+curl -sfL https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/uninstall.sh | sudo sh
+```
+
+**Windows (PowerShell Admin)**
+```powershell
+iwr -useb https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/uninstall.ps1 | iex
+```
+
+Alternatively, if you still have the binary: `sudo fsd uninstall` (Linux) or `fsd uninstall` (Windows).
+
+### Management
 Once installed, use the CLI to manage the service:
 
 ```bash
@@ -93,9 +104,6 @@ fsd logs
 # Stop/Start service
 sudo fsd stop
 sudo fsd start
-
-# Uninstall (Preserves data)
-sudo fsd uninstall
 ```
 
 ## Configuration
