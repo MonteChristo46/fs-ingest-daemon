@@ -56,7 +56,25 @@ $Target = Join-Path $InstallDir $BinName
 
 Write-Host "Downloading $Url..."
 
+
+
 Invoke-WebRequest -Uri $Url -OutFile $Target
+
+
+
+
+
+
+
+# Unblock the file (Fix for "Access Denied" / Mark of the Web)
+
+
+
+Unblock-File -Path $Target
+
+
+
+
 
 
 
