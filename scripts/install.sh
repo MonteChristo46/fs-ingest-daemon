@@ -95,7 +95,19 @@ fi
 
 # Run Installer
 echo "Running fsd install..."
-"$TARGET" install
+# We redirect stdin from /dev/tty to ensure interactive prompts work
+# even when the script is piped via curl
+if [ -t 0 ]; then
+    "$TARGET" install
+else
+    # If not running in a terminal (e.g. piped), try to force TTY
+    if [ -c /dev/tty ]; then
+        "$TARGET" install < /dev/tty
+    else
+        echo "⚠️  Warning: No TTY detected. Running in non-interactive mode."
+        "$TARGET" install
+    fi
+fi
 
 echo ""
 echo "✅ Installation wrapper complete."
