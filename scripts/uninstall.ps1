@@ -4,12 +4,21 @@ $ErrorActionPreference = "Stop"
 $InstallDir = "C:\ProgramData\fsd"
 $BinName = "fsd.exe"
 
-# 1. Admin Check
+# 1. Check Privileges
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Error "Please run this script as Administrator."
-    exit 1
+$IsAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if ($IsAdmin) {
+    Write-Host "Uninstalling System Service (ADMIN)..."
+    $InstallDir = "C:\ProgramData\fsd"
+    $PathScope = "Machine"
+} else {
+    Write-Host "Uninstalling User Service..."
+    $InstallDir = Join-Path $env:LOCALAPPDATA "fsd"
+    $PathScope = "User"
 }
+
+$BinName = "fsd.exe"
 
 # 2. Uninstall Service
 $Target = Join-Path $InstallDir $BinName
@@ -23,17 +32,17 @@ if (Test-Path $Target) {
 }
 
 # 3. Remove from PATH
-$OldPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+$OldPath = [Environment]::GetEnvironmentVariable("Path", $PathScope)
 if ($OldPath -like "*$InstallDir*") {
-    Write-Host "Removing $InstallDir from System PATH..."
-    # Remove with trailing semicolon or without
+    Write-Host "Removing $InstallDir from $PathScope PATH..."
+    # Clean removal handling potential semicolon variations
     $NewPath = $OldPath.Replace(";$InstallDir", "").Replace("$InstallDir;", "").Replace($InstallDir, "")
-    [Environment]::SetEnvironmentVariable("Path", $NewPath, "Machine")
+    [Environment]::SetEnvironmentVariable("Path", $NewPath, $PathScope)
 }
 
 # 4. Remove Directory
 if (Test-Path $InstallDir) {
-    Write-Host "Removing installation directory..."
+    Write-Host "Removing installation directory: $InstallDir"
     Remove-Item -Path $InstallDir -Recurse -Force
 }
 
