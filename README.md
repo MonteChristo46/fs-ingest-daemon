@@ -36,16 +36,34 @@ The daemon operates with four main concurrent components:
 
 **fs-ingest-daemon** handles its own setup. You can install it with a single command or manually.
 
-### Quick Install (Recommended)
+### Quick Install
 
-These commands automatically download the latest binary, install it to the system path, and start the interactive setup.
+These commands automatically download the latest binary, install it, and start the interactive setup.
 
-**Linux / macOS**
+#### Linux / macOS
+
+**Option A: System Service (Recommended)**
+*Requires sudo. Installs to `/opt/fsd` and runs on boot.*
 ```bash
 curl -sfL https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/install.sh | sudo sh
 ```
 
-**Windows (PowerShell Admin)**
+**Option B: User Service**
+*No sudo required. Installs to `~/fsd` and runs on login.*
+```bash
+curl -sfL https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/install.sh | sh
+```
+
+#### Windows
+
+**Option A: System Service (Recommended)**
+*Run in PowerShell as Administrator. Installs to `C:\ProgramData\fsd`.*
+```powershell
+iwr -useb https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/install.ps1 | iex
+```
+
+**Option B: User Service**
+*Run in standard PowerShell. Installs to `%LOCALAPPDATA%\fsd`.*
 ```powershell
 iwr -useb https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/install.ps1 | iex
 ```
@@ -81,11 +99,16 @@ To cleanly remove the service, data, and binary:
 
 **Linux / macOS**
 ```bash
+# System Install (if you installed with sudo)
 curl -sfL https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/uninstall.sh | sudo sh
+
+# User Install
+curl -sfL https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/uninstall.sh | sh
 ```
 
-**Windows (PowerShell Admin)**
+**Windows**
 ```powershell
+# Works for both System (Admin) and User installs
 iwr -useb https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/uninstall.ps1 | iex
 ```
 
