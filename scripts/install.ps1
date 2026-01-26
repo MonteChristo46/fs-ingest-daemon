@@ -38,13 +38,69 @@ if ($IsAdmin) {
 
 # 2. Create Directory
 
+
+
 if (-not (Test-Path -Path $InstallDir)) {
+
+
 
     New-Item -ItemType Directory -Path $InstallDir | Out-Null
 
+
+
     Write-Host "Created directory $InstallDir"
 
+
+
 }
+
+
+
+
+
+
+
+# Fix Permissions: Ensure users can read/execute in this directory
+
+
+
+# (Important for ProgramData installs so non-admins can at least run 'fsd version' or see logs if allowed)
+
+
+
+try {
+
+
+
+    $Acl = Get-Acl $InstallDir
+
+
+
+    $Ar = New-Object System.Security.AccessControl.FileSystemAccessRule("Users", "ReadAndExecute", "ContainerInherit,ObjectInherit", "None", "Allow")
+
+
+
+    $Acl.SetAccessRule($Ar)
+
+
+
+    Set-Acl $InstallDir $Acl
+
+
+
+} catch {
+
+
+
+    Write-Warning "Could not explicitly set directory permissions. You might need to adjust them manually."
+
+
+
+}
+
+
+
+
 
 
 
