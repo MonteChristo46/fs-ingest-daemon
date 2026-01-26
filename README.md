@@ -30,7 +30,7 @@ The daemon operates with four main concurrent components:
     *   Initiates a handshake with the Cloud API to get a Presigned Upload URL.
     *   Streams the file directly to object storage (S3).
     *   Confirms the upload with the API and marks the file as `UPLOADED`.
-5.  **Pruner:** Monitors local disk usage. If the watched directory size exceeds the configured `max_data_size_gb`, it deletes the Least Recently Modified (LRM) files that have been successfully `UPLOADED`, freeing up space for new data.
+5.  **Pruner:** Monitors local disk usage. Implements a Hysteresis loop: eviction starts when usage exceeds `max_data_size_gb` * `prune_high_watermark_percent` (default 90%) and continues until usage drops below `prune_low_watermark_percent` (default 75%). This prevents rapid oscillation and reduces disk/DB fragmentation. Only `UPLOADED` files are eligible for deletion (LRM).
 
 ## Installation
 
@@ -116,6 +116,8 @@ The configuration file is generated at install time (e.g., `/opt/fsd/config.json
 | `ingest_worker_count` | Number of concurrent upload workers. | `5` |
 | `prune_check_interval` | Frequency of disk usage checks. | `"1m"` |
 | `prune_batch_size` | Number of files to delete per prune cycle when full. | `50` |
+| `prune_high_watermark_percent` | Percentage of Max Size to trigger eviction. | `90` |
+| `prune_low_watermark_percent` | Percentage of Max Size to stop eviction. | `75` |
 | `api_timeout` | Timeout duration for HTTP requests to the Cloud API. | `"30s"` |
 | `debounce_duration` | Wait time after file write before processing (prevents partial reads). | `"500ms"` |
 | `orphan_check_interval` | Time before a waiting file is marked as ORPHAN (uploaded without partner). | `"5m"` |

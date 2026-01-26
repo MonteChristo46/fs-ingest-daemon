@@ -61,6 +61,19 @@ func (p *Pruner) Stop() {
 func (p *Pruner) Prune() {
 	maxBytes := int64(p.cfg.MaxDataSizeGB * 1024 * 1024 * 1024)
 
+	// Calculate Hysteresis Watermarks
+	highMark := p.cfg.PruneHighWatermarkPercent
+	if highMark <= 0 {
+		highMark = 90
+	}
+	lowMark := p.cfg.PruneLowWatermarkPercent
+	if lowMark <= 0 {
+		lowMark = 75
+	}
+
+	highWatermarkBytes := int64(float64(maxBytes) * float64(highMark) / 100.0)
+	lowWatermarkBytes := int64(float64(maxBytes) * float64(lowMark) / 100.0)
+
 	// Get total tracked size from DB
 	currentSize, err := p.store.GetTotalSize()
 	if err != nil {
@@ -68,45 +81,65 @@ func (p *Pruner) Prune() {
 		return
 	}
 
-	if currentSize <= maxBytes {
+	if currentSize <= highWatermarkBytes {
 		return // usage is within limits
 	}
 
-	p.logger.Info("Pruner: Disk usage exceeded", "current_size_bytes", currentSize, "max_bytes", maxBytes, "status", "starting_eviction")
+	p.logger.Info("Pruner: High watermark exceeded",
+		"current_size_bytes", currentSize,
+		"max_bytes", maxBytes,
+		"high_watermark_bytes", highWatermarkBytes,
+		"target_low_watermark_bytes", lowWatermarkBytes,
+		"status", "starting_eviction")
 
-	// Fetch candidates for deletion.
-	// Only files with status='UPLOADED' are eligible.
-	candidates, err := p.store.GetPruneCandidates(p.cfg.PruneBatchSize)
-	if err != nil {
-		p.logger.Error("Pruner: Error fetching candidates", "error", err)
-		return
-	}
-
-	// Backpressure mechanism:
-	// If the disk is full but we have no uploaded files to delete, we are in a critical state.
-	// We cannot delete PENDING files as that would mean data loss.
-	if len(candidates) == 0 {
-		p.logger.Warn("Pruner: Disk full but no UPLOADED files to delete! Backpressure active.")
-		return
-	}
-
-	// Evict candidates
-	for _, f := range candidates {
-		// Attempt to remove the file from filesystem
-		err := os.Remove(f.Path)
-		if err != nil && !os.IsNotExist(err) {
-			p.logger.Error("Pruner: Failed to remove file", "path", f.Path, "error", err)
-			continue
+	// Eviction Loop
+	for currentSize > lowWatermarkBytes {
+		// Fetch candidates for deletion.
+		// Only files with status='UPLOADED' are eligible.
+		candidates, err := p.store.GetPruneCandidates(p.cfg.PruneBatchSize)
+		if err != nil {
+			p.logger.Error("Pruner: Error fetching candidates", "error", err)
+			return
 		}
 
-		// Remove record from DB
-		if err := p.store.RemoveFile(f.Path); err != nil {
-			p.logger.Error("Pruner: Failed to remove DB record", "path", f.Path, "error", err)
-		} else {
-			p.logger.Info("Pruned file", "path", f.Path)
+		// Backpressure mechanism:
+		// If the disk is full but we have no uploaded files to delete, we are in a critical state.
+		// We cannot delete PENDING files as that would mean data loss.
+		if len(candidates) == 0 {
+			p.logger.Warn("Pruner: Disk usage high but no UPLOADED files to delete! Backpressure active.", "current_size", currentSize)
+			return
 		}
 
-		// Note: We process the whole batch without re-checking size for efficiency.
-		// The next tick will re-evaluate if more pruning is needed.
+		deletedCount := 0
+		// Evict candidates
+		for _, f := range candidates {
+			// Attempt to remove the file from filesystem
+			err := os.Remove(f.Path)
+			if err != nil && !os.IsNotExist(err) {
+				p.logger.Error("Pruner: Failed to remove file", "path", f.Path, "error", err)
+				continue
+			}
+
+			// Remove record from DB
+			if err := p.store.RemoveFile(f.Path); err != nil {
+				p.logger.Error("Pruner: Failed to remove DB record", "path", f.Path, "error", err)
+			} else {
+				p.logger.Info("Pruned file", "path", f.Path, "size", f.Size)
+				currentSize -= f.Size // Decrement local tracker
+				deletedCount++
+			}
+
+			if currentSize <= lowWatermarkBytes {
+				break
+			}
+		}
+
+		if deletedCount == 0 {
+			// Avoid infinite loop if we have candidates but fail to delete them
+			p.logger.Error("Pruner: Failed to delete any files in batch, aborting cycle")
+			break
+		}
 	}
+
+	p.logger.Info("Pruner: Eviction cycle complete", "final_size", currentSize)
 }

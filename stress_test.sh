@@ -3,8 +3,8 @@
 # Configuration
 ROOT_DIR=${1:-"$HOME/fsd/data"}
 TEST_DATA_DIR=${2:-"./test-data"}
-NUM_CAMS=${3:-5}
-FILES_PER_CAM=${4:-20}
+NUM_SOURCES=${3:-5}    # Renamed from NUM_CAMS
+FILES_PER_SOURCE=${4:-20} # Renamed from FILES_PER_CAM
 DELAY=${5:-0} # Set to 0 for max speed (stress test)
 MODE="" 
 
@@ -41,8 +41,8 @@ echo "FS Ingest Daemon - Stress Test Generator"
 echo "------------------------------------------------"
 echo "Target: $ROOT_DIR"
 echo "Source: $TEST_DATA_DIR"
-echo "Cameras: $NUM_CAMS"
-echo "Files/Cam: $FILES_PER_CAM"
+echo "Sources: $NUM_SOURCES"
+echo "Files/Source: $FILES_PER_SOURCE"
 echo "Delay: ${DELAY}s"
 echo "Mode: $MODE"
 echo "------------------------------------------------"
@@ -81,17 +81,55 @@ echo "Found $NUM_IMAGES source images."
 # Ensure root exists
 mkdir -p "$ROOT_DIR"
 
-# Loop to simulate multiple cameras/sensors
-for ((i=1; i<=NUM_CAMS; i++)); do
-    # Create a realistic nested structure: cam_id/year/month/day
-    DATE_PATH=$(date "+%Y/%m/%d")
-    CAM_DIR="$ROOT_DIR/cam_$i/$DATE_PATH"
+# Loop to simulate multiple data sources (Products/Lines/Recipes)
+for ((i=1; i<=NUM_SOURCES; i++)); do
+    # Generate realistic manufacturing path structure
+    # Possibilities for variable depth:
+    # 1. Product/Recipe
+    # 2. Line/Product/Recipe
+    # 3. Site/Line/Product/Recipe
     
-    echo "Initializing $CAM_DIR ..."
-    mkdir -p "$CAM_DIR"
+    PRODUCTS=("Widget" "Housing" "PCB" "Display" "Battery")
+    RECIPES=("Assembly_V1" "Inspection_Final" "Weld_Check" "Glue_Process" "Color_Test")
+    LINES=("Line_Alpha" "Line_Beta" "Line_Gamma")
+    SITES=("Plant_Austin" "Plant_Berlin" "Plant_Suzhou")
+
+    # Pick random components
+    P_IDX=$(( (i - 1) % ${#PRODUCTS[@]} ))
+    PROD="${PRODUCTS[$P_IDX]}_$(printf "%02d" $i)" # Unique product identifier to simulate distinct source
+    
+    R_IDX=$(( RANDOM % ${#RECIPES[@]} ))
+    RECIPE=${RECIPES[$R_IDX]}
+    
+    L_IDX=$(( RANDOM % ${#LINES[@]} ))
+    LINE=${LINES[$L_IDX]}
+    
+    S_IDX=$(( RANDOM % ${#SITES[@]} ))
+    SITE=${SITES[$S_IDX]}
+    
+    # Determine depth/structure randomly (Variable Length)
+    STRUCTURE_TYPE=$(( RANDOM % 3 ))
+    
+    if [ $STRUCTURE_TYPE -eq 0 ]; then
+        # Depth 2: Product/Recipe
+        BASE_PATH="$PROD/$RECIPE"
+    elif [ $STRUCTURE_TYPE -eq 1 ]; then
+        # Depth 3: Line/Product/Recipe
+        BASE_PATH="$LINE/$PROD/$RECIPE"
+    else
+        # Depth 4: Site/Line/Product/Recipe
+        BASE_PATH="$SITE/$LINE/$PROD/$RECIPE"
+    fi
+    
+    # Add Date partition for realism (common in ingestion)
+    DATE_PATH=$(date "+%Y/%m/%d")
+    TARGET_DIR="$ROOT_DIR/$BASE_PATH/$DATE_PATH"
+    
+    echo "Initializing source $i: $TARGET_DIR ..."
+    mkdir -p "$TARGET_DIR"
 
     # Generate files
-    for ((j=1; j<=FILES_PER_CAM; j++)); do
+    for ((j=1; j<=FILES_PER_SOURCE; j++)); do
         # Unique filename (keep extension from source)
         
         # Pick random image
@@ -100,7 +138,7 @@ for ((i=1; i<=NUM_CAMS; i++)); do
         EXTENSION="${SOURCE_FILE##*.}"
         
         FILENAME="img_$(date +%s%N)_$j.$EXTENSION"
-        FILE_PATH="$CAM_DIR/$FILENAME"
+        FILE_PATH="$TARGET_DIR/$FILENAME"
         
         # Copy file
         cp "$SOURCE_FILE" "$FILE_PATH"
@@ -121,7 +159,7 @@ for ((i=1; i<=NUM_CAMS; i++)); do
 
         # Optional: Print progress every 10 files
         if (( j % 10 == 0 )); then
-            echo "  [cam_$i] Created $j files..."
+            echo "  [source_$i] Created $j files..."
         fi
 
         # Optional Delay
@@ -132,5 +170,5 @@ for ((i=1; i<=NUM_CAMS; i++)); do
 done
 
 echo "------------------------------------------------"
-echo "Stress test complete. generated $((NUM_CAMS * FILES_PER_CAM)) files."
+echo "Stress test complete. Generated $((NUM_SOURCES * FILES_PER_SOURCE)) files."
 echo "------------------------------------------------"

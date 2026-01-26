@@ -10,6 +10,8 @@
   "ingest_worker_count": 2,
   "prune_check_interval": "1m",
   "prune_batch_size": 50,
+  "prune_high_watermark_percent": 90,
+  "prune_low_watermark_percent": 75,
   "api_timeout": "30s",
   "debounce_duration": "50ms",
   "orphan_check_interval": "5m",

@@ -12,49 +12,53 @@ import (
 
 // Config represents the application configuration structure.
 type Config struct {
-	DeviceID               string  `json:"device_id"`                // Unique identifier for the device (e.g., "dev-001")
-	Endpoint               string  `json:"endpoint"`                 // The API base URL
-	MaxDataSizeGB          float64 `json:"max_data_size_gb"`         // Maximum allowed size for the local storage in GB before pruning kicks in
-	WatchPath              string  `json:"watch_path"`               // The local directory path to watch for new files
-	LogPath                string  `json:"log_path"`                 // Path to the log file
-	DBPath                 string  `json:"db_path"`                  // Path to the SQLite database
-	IngestCheckInterval    string  `json:"ingest_check_interval"`    // Duration string (e.g. "2s") for ingest polling
-	IngestBatchSize        int     `json:"ingest_batch_size"`        // Number of files to process per ingest tick
-	IngestWorkerCount      int     `json:"ingest_worker_count"`      // Number of concurrent upload workers
-	PruneCheckInterval     string  `json:"prune_check_interval"`     // Duration string (e.g. "1m") for prune checks
-	PruneBatchSize         int     `json:"prune_batch_size"`         // Number of files to prune per tick
-	APITimeout             string  `json:"api_timeout"`              // HTTP Client timeout duration string
-	DebounceDuration       string  `json:"debounce_duration"`        // Duration string (e.g. "500ms") for watcher debounce
-	OrphanCheckInterval    string  `json:"orphan_check_interval"`    // Duration string (e.g. "5m") for orphan checks
-	MetadataUpdateInterval string  `json:"metadata_update_interval"` // Duration string (e.g. "24h") for device metadata updates
-	AuthToken              string  `json:"auth_token"`               // Token indicating the device is registered (or empty if not)
-	WebClientURL           string  `json:"web_client_url"`           // URL where the user claims the device
-	SidecarStrategy        string  `json:"sidecar_strategy"`         // "strict" (default) or "none" (image only)
-	LogMaxSizeMB           int     `json:"log_max_size_mb"`          // Max size in MB before rotation. Default 10.
-	LogMaxBackups          int     `json:"log_max_backups"`          // Max number of old files to keep. Default 3.
-	LogMaxAgeDays          int     `json:"log_max_age_days"`         // Max number of days to keep old files. Default 28.
-	LogCompress            bool    `json:"log_compress"`             // Whether to compress old files. Default true.
+	DeviceID                  string  `json:"device_id"`                    // Unique identifier for the device (e.g., "dev-001")
+	Endpoint                  string  `json:"endpoint"`                     // The API base URL
+	MaxDataSizeGB             float64 `json:"max_data_size_gb"`             // Maximum allowed size for the local storage in GB before pruning kicks in
+	WatchPath                 string  `json:"watch_path"`                   // The local directory path to watch for new files
+	LogPath                   string  `json:"log_path"`                     // Path to the log file
+	DBPath                    string  `json:"db_path"`                      // Path to the SQLite database
+	IngestCheckInterval       string  `json:"ingest_check_interval"`        // Duration string (e.g. "2s") for ingest polling
+	IngestBatchSize           int     `json:"ingest_batch_size"`            // Number of files to process per ingest tick
+	IngestWorkerCount         int     `json:"ingest_worker_count"`          // Number of concurrent upload workers
+	PruneCheckInterval        string  `json:"prune_check_interval"`         // Duration string (e.g. "1m") for prune checks
+	PruneBatchSize            int     `json:"prune_batch_size"`             // Number of files to prune per tick
+	PruneHighWatermarkPercent int     `json:"prune_high_watermark_percent"` // Start pruning when usage > MaxDataSizeGB * (High/100)
+	PruneLowWatermarkPercent  int     `json:"prune_low_watermark_percent"`  // Stop pruning when usage < MaxDataSizeGB * (Low/100)
+	APITimeout                string  `json:"api_timeout"`                  // HTTP Client timeout duration string
+	DebounceDuration          string  `json:"debounce_duration"`            // Duration string (e.g. "500ms") for watcher debounce
+	OrphanCheckInterval       string  `json:"orphan_check_interval"`        // Duration string (e.g. "5m") for orphan checks
+	MetadataUpdateInterval    string  `json:"metadata_update_interval"`     // Duration string (e.g. "24h") for device metadata updates
+	AuthToken                 string  `json:"auth_token"`                   // Token indicating the device is registered (or empty if not)
+	WebClientURL              string  `json:"web_client_url"`               // URL where the user claims the device
+	SidecarStrategy           string  `json:"sidecar_strategy"`             // "strict" (default) or "none" (image only)
+	LogMaxSizeMB              int     `json:"log_max_size_mb"`              // Max size in MB before rotation. Default 10.
+	LogMaxBackups             int     `json:"log_max_backups"`              // Max number of old files to keep. Default 3.
+	LogMaxAgeDays             int     `json:"log_max_age_days"`             // Max number of days to keep old files. Default 28.
+	LogCompress               bool    `json:"log_compress"`                 // Whether to compress old files. Default true.
 }
 
 var (
 	// Default configuration values
-	DefaultEndpoint               = "https://glitch-hunt-ingestion.my-basement.cloud"
-	DefaultWebClientURL           = "http://glitch-hunt.my-basement.cloud"
-	DefaultMaxDataSizeGB          = 1.0
-	DefaultIngestCheckInterval    = "20ms"
-	DefaultIngestBatchSize        = 10
-	DefaultIngestWorkerCount      = 5
-	DefaultPruneCheckInterval     = "1m"
-	DefaultPruneBatchSize         = 50
-	DefaultAPITimeout             = "30s"
-	DefaultDebounceDuration       = "500ms"
-	DefaultOrphanCheckInterval    = "5m"
-	DefaultMetadataUpdateInterval = "24h"
-	DefaultSidecarStrategy        = "none"
-	DefaultLogMaxSizeMB           = 10
-	DefaultLogMaxBackups          = 3
-	DefaultLogMaxAgeDays          = 28
-	DefaultLogCompress            = true
+	DefaultEndpoint                  = "https://glitch-hunt-ingestion.my-basement.cloud"
+	DefaultWebClientURL              = "http://glitch-hunt.my-basement.cloud"
+	DefaultMaxDataSizeGB             = 1.0
+	DefaultIngestCheckInterval       = "20ms"
+	DefaultIngestBatchSize           = 10
+	DefaultIngestWorkerCount         = 5
+	DefaultPruneCheckInterval        = "1m"
+	DefaultPruneBatchSize            = 50
+	DefaultPruneHighWatermarkPercent = 90
+	DefaultPruneLowWatermarkPercent  = 75
+	DefaultAPITimeout                = "30s"
+	DefaultDebounceDuration          = "500ms"
+	DefaultOrphanCheckInterval       = "5m"
+	DefaultMetadataUpdateInterval    = "24h"
+	DefaultSidecarStrategy           = "none"
+	DefaultLogMaxSizeMB              = 10
+	DefaultLogMaxBackups             = 3
+	DefaultLogMaxAgeDays             = 28
+	DefaultLogCompress               = true
 )
 
 // Load reads the configuration from the specified path.
@@ -62,27 +66,29 @@ var (
 func Load(path string) (*Config, error) {
 	// Initialize with sensible defaults
 	cfg := &Config{
-		DeviceID:               "dev-001",
-		Endpoint:               DefaultEndpoint,
-		MaxDataSizeGB:          DefaultMaxDataSizeGB,
-		WatchPath:              "./data",
-		LogPath:                "./fsd.log",
-		DBPath:                 "./fsd.db",
-		IngestCheckInterval:    DefaultIngestCheckInterval,
-		IngestBatchSize:        DefaultIngestBatchSize,
-		IngestWorkerCount:      DefaultIngestWorkerCount,
-		PruneCheckInterval:     DefaultPruneCheckInterval,
-		PruneBatchSize:         DefaultPruneBatchSize,
-		APITimeout:             DefaultAPITimeout,
-		DebounceDuration:       DefaultDebounceDuration,
-		OrphanCheckInterval:    DefaultOrphanCheckInterval,
-		MetadataUpdateInterval: DefaultMetadataUpdateInterval,
-		WebClientURL:           DefaultWebClientURL,
-		SidecarStrategy:        DefaultSidecarStrategy,
-		LogMaxSizeMB:           DefaultLogMaxSizeMB,
-		LogMaxBackups:          DefaultLogMaxBackups,
-		LogMaxAgeDays:          DefaultLogMaxAgeDays,
-		LogCompress:            DefaultLogCompress,
+		DeviceID:                  "dev-001",
+		Endpoint:                  DefaultEndpoint,
+		MaxDataSizeGB:             DefaultMaxDataSizeGB,
+		WatchPath:                 "./data",
+		LogPath:                   "./fsd.log",
+		DBPath:                    "./fsd.db",
+		IngestCheckInterval:       DefaultIngestCheckInterval,
+		IngestBatchSize:           DefaultIngestBatchSize,
+		IngestWorkerCount:         DefaultIngestWorkerCount,
+		PruneCheckInterval:        DefaultPruneCheckInterval,
+		PruneBatchSize:            DefaultPruneBatchSize,
+		PruneHighWatermarkPercent: DefaultPruneHighWatermarkPercent,
+		PruneLowWatermarkPercent:  DefaultPruneLowWatermarkPercent,
+		APITimeout:                DefaultAPITimeout,
+		DebounceDuration:          DefaultDebounceDuration,
+		OrphanCheckInterval:       DefaultOrphanCheckInterval,
+		MetadataUpdateInterval:    DefaultMetadataUpdateInterval,
+		WebClientURL:              DefaultWebClientURL,
+		SidecarStrategy:           DefaultSidecarStrategy,
+		LogMaxSizeMB:              DefaultLogMaxSizeMB,
+		LogMaxBackups:             DefaultLogMaxBackups,
+		LogMaxAgeDays:             DefaultLogMaxAgeDays,
+		LogCompress:               DefaultLogCompress,
 	}
 
 	f, err := os.Open(path)
