@@ -140,6 +140,7 @@ The configuration file is generated at install time (e.g., `/opt/fsd/config.json
 | `device_id` | Unique identifier used in API requests (e.g., "dev-001"). | `(User Input)` |
 | `endpoint` | Base URL of the Ingestion API. | `(User Input)` |
 | `sidecar_strategy` | Pairing strategy. `strict` waits for .json sidecar; `none` uploads standalone files. | `"none"` |
+| `allowed_extensions` | List of allowed file extensions (case-insensitive). | `[".jpg", ".jpeg", ".png", ".json"]` |
 | `watch_path` | Local directory path to watch for new files. | `[InstallDir]/data` |
 | `max_data_size_gb` | Maximum allowed size for local storage (GB) before pruning kicks in. | `1.0` |
 | `ingest_check_interval` | Polling frequency for checking new PENDING files. | `"20ms"` |

@@ -1,0 +1,1 @@
+go build -o fsd ./cmd/fsd && ./fsd run

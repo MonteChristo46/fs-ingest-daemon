@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"fs-ingest-daemon/internal/api"
@@ -198,8 +199,26 @@ func (d *Daemon) processFile(path string) {
 		return
 	}
 
+	// Check allowed extensions
+	ext := strings.ToLower(filepath.Ext(path))
+	allowed := false
+	for _, e := range d.Cfg.AllowedExtensions {
+		if strings.EqualFold(ext, e) {
+			allowed = true
+			break
+		}
+	}
+
+	if !allowed {
+		// Log specific error for debugging but don't error out loudly as it's common to have other files
+		if d.Logger != nil {
+			d.Logger.Debug("Skipping file with disallowed extension", "path", path, "ext", ext)
+		}
+		return
+	}
+
 	// Check extension to determine if it is metadata
-	isMeta := filepath.Ext(path) == ".json"
+	isMeta := ext == ".json"
 
 	expectSidecar := true
 	if d.Cfg.SidecarStrategy == "none" {
