@@ -57,7 +57,7 @@ var (
 	DefaultMetadataUpdateInterval    = "24h"
 	DefaultSidecarStrategy           = "none"
 	DefaultLogMaxSizeMB              = 10
-	DefaultLogMaxBackups             = 3
+	DefaultLogMaxBackups             = 1
 	DefaultLogMaxAgeDays             = 28
 	DefaultLogCompress               = true
 	DefaultAllowedExtensions         = []string{".jpg", ".jpeg", ".png", ".json"}

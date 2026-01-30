@@ -254,10 +254,28 @@ func (s *Store) GetPruneCandidates(limit int) ([]FileRecord, error) {
 }
 
 // RemoveFile deletes a file record from the database.
+// It also clears any references to this file in the partner_path column of other records.
 func (s *Store) RemoveFile(path string) error {
-	query := `DELETE FROM files WHERE path = ?`
-	_, err := s.db.Exec(query, path)
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 1. Unlink any files that reference this path as their partner
+	// This prevents "ghost partners" where a file waits for a non-existent partner.
+	queryUnlink := `UPDATE files SET partner_path = NULL WHERE partner_path = ?`
+	if _, err := tx.Exec(queryUnlink, path); err != nil {
+		return err
+	}
+
+	// 2. Delete the file record itself
+	queryDelete := `DELETE FROM files WHERE path = ?`
+	if _, err := tx.Exec(queryDelete, path); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // GetPendingFiles returns a list of files waiting to be uploaded.
