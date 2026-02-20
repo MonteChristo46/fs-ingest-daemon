@@ -150,6 +150,7 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 		runCmd,
 		statusCmd,
 		logsCmd,
+		SimulateCmd(logger),
 	)
 	return rootCmd
 }

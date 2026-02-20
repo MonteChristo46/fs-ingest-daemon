@@ -6,6 +6,7 @@ package store
 
 import (
 	"database/sql"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -40,15 +41,31 @@ type Store struct {
 
 // NewStore initializes the SQLite database connection and runs migrations.
 func NewStore(dbPath string) (*Store, error) {
-	// WAL mode is much better for concurrent access
-	// modernc.org/sqlite uses "sqlite" as driver name
-	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
+	// modernc.org/sqlite uses "sqlite" as driver name.
+	// We use a single connection to avoid "database is locked" errors with writers.
+	// SQLite handles serialization internally, but database/sql connection pool
+	// can sometimes be too aggressive.
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
+		return nil, err
+	}
+
+	// Set connection limits
+	db.SetMaxOpenConns(1)
+
+	// Enable WAL mode and busy timeout for better concurrency handling
+	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if _, err := db.Exec("PRAGMA busy_timeout=5000;"); err != nil {
+		db.Close()
 		return nil, err
 	}
 
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
+		db.Close()
 		return nil, err
 	}
 
@@ -101,27 +118,59 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 	var foundPartner bool
 
 	if !isMeta {
-		// I am an image (data). My partner MUST be my filename + .json
-		// e.g. /path/to/img.png -> /path/to/img.png.json
-		partnerPath = path + ".json"
-	} else {
-		// I am metadata (.json). My partner MUST be my filename without .json
-		// e.g. /path/to/img.png.json -> /path/to/img.png
-		partnerPath = strings.TrimSuffix(path, ".json")
-	}
+		// I am an image (data).
+		// Strict/Double Extension: img.png -> img.png.json
+		doubleExtPartner := path + ".json"
+		// Single Extension: img.png -> img.json
+		singleExtPartner := strings.TrimSuffix(path, filepath.Ext(path)) + ".json"
 
-	// Check if my partner is already in the DB
-	err = tx.QueryRow("SELECT id, status FROM files WHERE path = ?", partnerPath).Scan(&partnerID, &partnerStatus)
-	if err == nil {
-		foundPartner = true
-	} else if err != sql.ErrNoRows {
-		return err
+		// Check if either partner exists
+		// We prioritize Double Extension if both exist (rare)
+		// We search for both
+		err = tx.QueryRow("SELECT id, status, path FROM files WHERE path = ? OR path = ?", doubleExtPartner, singleExtPartner).Scan(&partnerID, &partnerStatus, &partnerPath)
+		if err == nil {
+			foundPartner = true
+		} else if err != sql.ErrNoRows {
+			return err
+		}
+
+		// If not found, we default to waiting for the Double Extension partner (Standard),
+		// but we will accept the Single Extension partner if it arrives later (handled in the isMeta block).
+		if !foundPartner {
+			partnerPath = doubleExtPartner
+		}
+
+	} else {
+		// I am metadata (.json).
+		// Double Extension: img.png.json -> img.png
+		// Single Extension: img.json -> img.png (or img.jpg, etc.)
+		base := strings.TrimSuffix(path, ".json")
+
+		// 1. Try Exact Match (Double Extension Case: base is likely "img.png")
+		// 2. Try Prefix Match (Single Extension Case: base is "img", looking for "img.%")
+		// We use a LIKE query to find the image partner.
+		// Note: We exclude myself (if I happened to be named img.json and img.json.json existed? Unlikely logic loop here but good to keep in mind)
+		// We also want to ensure we find a valid partner (not another json file, but !isMeta checks usually prevent that or app logic).
+		// But here we rely on the fact that images don't end in .json usually.
+
+		// SQLite GLOB or LIKE. LIKE is case insensitive by default in SQLite for ASCII.
+		// We look for path = base OR path LIKE base + ".%"
+		query := `SELECT id, status, path FROM files WHERE path = ? OR path LIKE ? LIMIT 1`
+		err = tx.QueryRow(query, base, base+".%").Scan(&partnerID, &partnerStatus, &partnerPath)
+		if err == nil {
+			foundPartner = true
+		} else if err != sql.ErrNoRows {
+			return err
+		}
+
+		// If not found, we don't know the partner path (could be .png, .jpg).
+		// So we leave partnerPath empty/null.
 	}
 
 	if !foundPartner {
 		// Partner not found -> I am waiting.
-		// If I am an image: partner_path is known (calculated above).
-		// If I am meta: partner_path is unknown (I can't guess the image extension), so we leave it NULL/empty.
+		// If I am an image: partner_path is set to doubleExtPartner (default).
+		// If I am meta: partner_path is unknown (NULL).
 
 		var pp sql.NullString
 		if partnerPath != "" {
@@ -156,9 +205,7 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 		// 2. Update PARTNER to PENDING. Ensure their partner_path is ME.
 
 		// Insert/Update ME
-		// Note: We always have partnerPath set here.
-		// If !isMeta (Image), we calculated partnerPath.
-		// If isMeta (Json), we retrieved partnerPath from the Image's record.
+		// Note: We always have partnerPath set here (from the Scan).
 		queryMe := `
 		INSERT INTO files (path, size, mod_time, status, partner_path)
 		VALUES (?, ?, ?, ?, ?)
@@ -176,8 +223,9 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 		// Update PARTNER
 		// We force it to PENDING so the ingester picks it up.
 		// CRITICAL: We also update partner_path.
-		// If Image arrived first: It set partner_path = Meta.json. (Correct)
-		// If Meta arrived first: It set partner_path = NULL. We MUST update it to Image.path (ME).
+		// This is vital for the Single Extension case:
+		// If Image was waiting for img.png.json, but img.json (ME) arrived and claimed it,
+		// we MUST update Image's partner_path to img.json (ME).
 		queryPartner := `UPDATE files SET status = ?, partner_path = ? WHERE id = ?`
 		_, err = tx.Exec(queryPartner, StatusPending, path, partnerID)
 		if err != nil {
