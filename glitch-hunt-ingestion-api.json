@@ -366,7 +366,7 @@
       "IngestStatus": {
         "type": "string",
         "enum": [
-          "SUCCESS",
+          "INGESTED",
           "FAILED"
         ],
         "title": "IngestStatus"

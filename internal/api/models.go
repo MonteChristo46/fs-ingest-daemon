@@ -29,7 +29,7 @@ type IngestResponse struct {
 type IngestStatus string
 
 const (
-	StatusSuccess IngestStatus = "SUCCESS"
+	StatusSuccess IngestStatus = "INGESTED"
 	StatusFailed  IngestStatus = "FAILED"
 )
 
