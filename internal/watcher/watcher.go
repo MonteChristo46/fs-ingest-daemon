@@ -137,6 +137,12 @@ func (w *Watcher) AddRecursive(path string) error {
 			w.logger.Info("Watching directory", "path", newPath)
 			return w.fsWatcher.Add(newPath)
 		}
+
+		// Fix: Process existing files immediately.
+		// If a directory is created with files already inside (or created very quickly),
+		// we might miss the Create event before the watcher is established.
+		// Manually triggering the callback here ensures we catch them.
+		w.callback(newPath)
 		return nil
 	})
 }

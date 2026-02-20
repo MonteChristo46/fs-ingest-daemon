@@ -39,7 +39,11 @@ fi
 echo "------------------------------------------------"
 echo "FS Ingest Daemon - Stress Test Generator"
 echo "------------------------------------------------"
-echo "Target: $ROOT_DIR"
+
+# Define Target Directories
+TARGET_DIRS=("$ROOT_DIR" "./fsd-watch")
+
+echo "Targets: ${TARGET_DIRS[*]}"
 echo "Source: $TEST_DATA_DIR"
 echo "Sources: $NUM_SOURCES"
 echo "Files/Source: $FILES_PER_SOURCE"
@@ -78,55 +82,43 @@ fi
 
 echo "Found $NUM_IMAGES source images."
 
-# Ensure root exists
-mkdir -p "$ROOT_DIR"
+# Ensure targets exist
+for T_ROOT in "${TARGET_DIRS[@]}"; do
+    mkdir -p "$T_ROOT"
+done
 
 # Loop to simulate multiple data sources (Products/Lines/Recipes)
 for ((i=1; i<=NUM_SOURCES; i++)); do
-    # Generate realistic manufacturing path structure
-    # Possibilities for variable depth:
-    # 1. Product/Recipe
-    # 2. Line/Product/Recipe
-    # 3. Site/Line/Product/Recipe
+    # Generate MVTec AD-like structure
+    # Structure: <Category>/<Split>/<Type>
     
-    PRODUCTS=("Widget" "Housing" "PCB" "Display" "Battery")
-    RECIPES=("Assembly_V1" "Inspection_Final" "Weld_Check" "Glue_Process" "Color_Test")
-    LINES=("Line_Alpha" "Line_Beta" "Line_Gamma")
-    SITES=("Plant_Austin" "Plant_Berlin" "Plant_Suzhou")
+    CATEGORIES=("bottle" "cable" "capsule" "carpet" "grid" "hazelnut" "leather" "metal_nut" "pill" "screw" "tile" "toothbrush" "transistor" "wood" "zipper")
+    SPLITS=("test" "train")
+    TYPES=("good" "defect" "scratch" "bent" "broken")
 
-    # Pick random components
-    P_IDX=$(( (i - 1) % ${#PRODUCTS[@]} ))
-    PROD="${PRODUCTS[$P_IDX]}_$(printf "%02d" $i)" # Unique product identifier to simulate distinct source
+    # Pick Category
+    # Use 'i' to determine category so we distribute sources across categories
+    C_IDX=$(( (i - 1) % ${#CATEGORIES[@]} ))
+    CATEGORY="${CATEGORIES[$C_IDX]}"
     
-    R_IDX=$(( RANDOM % ${#RECIPES[@]} ))
-    RECIPE=${RECIPES[$R_IDX]}
+    # Pick Split
+    S_IDX=$(( RANDOM % ${#SPLITS[@]} ))
+    SPLIT=${SPLITS[$S_IDX]}
+
+    # Pick Type
+    T_IDX=$(( RANDOM % ${#TYPES[@]} ))
+    TYPE=${TYPES[$T_IDX]}
     
-    L_IDX=$(( RANDOM % ${#LINES[@]} ))
-    LINE=${LINES[$L_IDX]}
+    BASE_PATH="$CATEGORY/$SPLIT/$TYPE"
     
-    S_IDX=$(( RANDOM % ${#SITES[@]} ))
-    SITE=${SITES[$S_IDX]}
-    
-    # Determine depth/structure randomly (Variable Length)
-    STRUCTURE_TYPE=$(( RANDOM % 3 ))
-    
-    if [ $STRUCTURE_TYPE -eq 0 ]; then
-        # Depth 2: Product/Recipe
-        BASE_PATH="$PROD/$RECIPE"
-    elif [ $STRUCTURE_TYPE -eq 1 ]; then
-        # Depth 3: Line/Product/Recipe
-        BASE_PATH="$LINE/$PROD/$RECIPE"
-    else
-        # Depth 4: Site/Line/Product/Recipe
-        BASE_PATH="$SITE/$LINE/$PROD/$RECIPE"
-    fi
-    
-    # Add Date partition for realism (common in ingestion)
-    DATE_PATH=$(date "+%Y/%m/%d")
-    TARGET_DIR="$ROOT_DIR/$BASE_PATH/$DATE_PATH"
-    
-    echo "Initializing source $i: $TARGET_DIR ..."
-    mkdir -p "$TARGET_DIR"
+    # Define targets for this source
+    declare -a CURRENT_TARGETS
+    for T_ROOT in "${TARGET_DIRS[@]}"; do
+        T_DIR="$T_ROOT/$BASE_PATH"
+        mkdir -p "$T_DIR"
+        CURRENT_TARGETS+=("$T_DIR")
+        echo "Initializing source $i in $T_DIR ..."
+    done
 
     # Generate files
     for ((j=1; j<=FILES_PER_SOURCE; j++)); do
@@ -138,28 +130,31 @@ for ((i=1; i<=NUM_SOURCES; i++)); do
         EXTENSION="${SOURCE_FILE##*.}"
         
         FILENAME="img_$(date +%s%N)_$j.$EXTENSION"
-        FILE_PATH="$TARGET_DIR/$FILENAME"
         
-        # Copy file
-        cp "$SOURCE_FILE" "$FILE_PATH"
-
-        # Create Context File (Only in strict mode)
-        if [ "$MODE" == "strict" ]; then
-            # Randomly select context_1.json or context_2.json
-            RAND_CTX=$(( RANDOM % 2 + 1 ))
-            CTX_SOURCE="$TEST_DATA_DIR/context_${RAND_CTX}.json"
+        for T_DIR in "${CURRENT_TARGETS[@]}"; do
+            FILE_PATH="$T_DIR/$FILENAME"
             
-            # Copy context file if it exists, appending .json (double extension)
-            if [ -f "$CTX_SOURCE" ]; then
-                JSON_PATH="${FILE_PATH}.json"
-                mkdir -p "$(dirname "$JSON_PATH")" # Ensure directory exists
-                cp "$CTX_SOURCE" "$JSON_PATH"
+            # Copy file
+            cp "$SOURCE_FILE" "$FILE_PATH"
+
+            # Create Context File (Only in strict mode)
+            if [ "$MODE" == "strict" ]; then
+                # Randomly select context_1.json or context_2.json
+                RAND_CTX=$(( RANDOM % 2 + 1 ))
+                CTX_SOURCE="$TEST_DATA_DIR/context_${RAND_CTX}.json"
+                
+                # Copy context file if it exists, appending .json (double extension)
+                if [ -f "$CTX_SOURCE" ]; then
+                    JSON_PATH="${FILE_PATH}.json"
+                    mkdir -p "$(dirname "$JSON_PATH")" # Ensure directory exists
+                    cp "$CTX_SOURCE" "$JSON_PATH"
+                fi
             fi
-        fi
+        done
 
         # Optional: Print progress every 10 files
         if (( j % 10 == 0 )); then
-            echo "  [source_$i] Created $j files..."
+            echo "  [source_$i] Created $j files (x${#TARGET_DIRS[@]} targets)..."
         fi
 
         # Optional Delay

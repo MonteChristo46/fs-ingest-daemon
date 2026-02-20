@@ -34,6 +34,9 @@ type Daemon struct {
 // Start is called when the service is started.
 // It initializes the configuration, database, and background workers (Pruner, Ingester, Watcher).
 func (d *Daemon) Start(s service.Service) error {
+	if d.Logger != nil {
+		d.Logger = d.Logger.With("service", "daemon")
+	}
 	// 1. Load Config if not already loaded (main usually loads it)
 	ex, err := os.Executable()
 	if err != nil {
@@ -89,10 +92,7 @@ func (d *Daemon) Start(s service.Service) error {
 		return fmt.Errorf("failed to start watcher: %v", err)
 	}
 
-	// 7. Initial Scan to catch files created while daemon was offline
-	go d.scanExistingFiles()
-
-	// 8. Start Orphan Checker
+	// 7. Start Orphan Checker
 	go d.orphanChecker()
 
 	// 9. Start Metadata Updater
@@ -233,25 +233,6 @@ func (d *Daemon) processFile(path string) {
 		if d.Logger != nil {
 			d.Logger.Info("Detected", "path", path)
 		}
-	}
-}
-
-// scanExistingFiles walks the watch path and processes all existing files.
-func (d *Daemon) scanExistingFiles() {
-	if d.Logger != nil {
-		d.Logger.Info("Performing initial scan", "path", d.Cfg.WatchPath)
-	}
-	err := filepath.Walk(d.Cfg.WatchPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			d.processFile(path)
-		}
-		return nil
-	})
-	if err != nil && d.Logger != nil {
-		d.Logger.Error("Initial scan failed", "error", err)
 	}
 }
 
