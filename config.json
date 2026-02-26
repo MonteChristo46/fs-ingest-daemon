@@ -22,5 +22,6 @@
   "log_max_size_mb": 10,
   "log_max_backups": 1,
   "log_max_age_days": 28,
-  "log_compress": true
+  "log_compress": true,
+  "allowed_extensions": [".jpg", ".jpeg", ".png", ".json"]
 }
