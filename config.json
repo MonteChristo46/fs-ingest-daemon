@@ -1,5 +1,5 @@
 {
-  "device_id": "d6:76:9c:79:a2:fb",
+  "device_id": "",
   "endpoint": "https://glitch-hunt-ingestion.my-basement.cloud",
   "max_data_size_gb": 1,
   "watch_path": "/Users/danielhoschele/Desktop/source-tree/fs-ingest-daemon/fsd-watch",
@@ -18,7 +18,7 @@
   "metadata_update_interval": "24h",
   "auth_token": "",
   "web_client_url": "https://glitch-hunt.my-basement.cloud",
-  "sidecar_strategy": "strict",
+  "sidecar_strategy": "none",
   "log_max_size_mb": 10,
   "log_max_backups": 1,
   "log_max_age_days": 28,
