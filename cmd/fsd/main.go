@@ -42,6 +42,10 @@ func main() {
 		log.Printf("Warning: Failed to load config early: %v\n", err)
 		// We can't really do much else if we want to respect the user's log path preference,
 		// but defaults in Load() should handle it if file is missing.
+		if cfg == nil {
+			// fallback to an empty config instead of crashing
+			cfg = &config.Config{}
+		}
 	}
 
 	svcConfig := &service.Config{
