@@ -2,16 +2,18 @@
 
 # Configuration
 SOURCE_DIR="./test-data/mvtec_anomaly_detection"
-TARGET_DIR="./data"
-RATE="1s" # Slowed down slightly to be readable
-DB_PATH="./fsd.db"
+TARGET_DIR="$HOME/fsd/data"
+RATE="1s"
+DB_PATH="$HOME/fsd/fsd.db"
 LOG_FILE="./simulation.log"
-CATEGORIES=${1:-""} # Optional categories to filter, e.g., "bottle,cable, capsule, carpet, grid, hazelnut, metal_nut"
+CATEGORIES=${1:-"bottle"} # Optional categories to filter
 
-# Cleanup & Build
 echo "--- CLEANUP ---"
-echo "Cleaning up $TARGET_DIR and $DB_PATH..."
-rm -rf "$TARGET_DIR" "$DB_PATH" "$LOG_FILE"
+echo "Cleaning up $TARGET_DIR..."
+# Note: We only delete the contents, NOT the directory itself, so the daemon's fsnotify watcher doesn't break.
+# We also do NOT delete DB_PATH as the background daemon holds an active connection to it.
+rm -rf "$TARGET_DIR"/*
+> "$LOG_FILE"
 mkdir -p "$TARGET_DIR"
 
 echo "--- BUILD ---"
@@ -21,10 +23,6 @@ go build -o fsd ./cmd/fsd/main.go || { echo "Build failed"; exit 1; }
 cleanup() {
     echo ""
     echo "--- STOPPING ---"
-    if [ -n "$FSD_PID" ]; then
-        echo "Killing Daemon (PID $FSD_PID)..."
-        kill $FSD_PID 2>/dev/null
-    fi
     if [ -n "$SIM_PID" ]; then
         echo "Killing Simulator (PID $SIM_PID)..."
         kill $SIM_PID 2>/dev/null
@@ -33,15 +31,6 @@ cleanup() {
 }
 trap cleanup INT TERM
 
-# Start Daemon
-echo "--- STARTING DAEMON ---"
-# Redirect daemon output to log file
-./fsd run >> "$LOG_FILE" 2>&1 &
-FSD_PID=$!
-echo "Daemon running with PID $FSD_PID (logs -> $LOG_FILE)"
-sleep 2 # Give daemon time to init watcher and DB
-
-# Start Simulator
 echo "--- STARTING SIMULATOR ---"
 echo "Source:     $SOURCE_DIR"
 echo "Target:     $TARGET_DIR"
@@ -63,11 +52,13 @@ SIM_PID=$!
 echo "Simulator running with PID $SIM_PID (logs -> $LOG_FILE)"
 
 # Tail the logs so we can see what's happening
-tail -f "$LOG_FILE" &
+# We tail both the simulation log and the daemon log (if it exists)
+DAEMON_LOG="$HOME/fsd/fsd.log"
+tail -f "$LOG_FILE" "$DAEMON_LOG" 2>/dev/null &
 TAIL_PID=$!
 
-# Wait forever (until Ctrl+C)
-wait $FSD_PID $SIM_PID
+# Wait for simulator to finish or until Ctrl+C
+wait $SIM_PID
 
 # Kill tail on exit
 kill $TAIL_PID 2>/dev/null
