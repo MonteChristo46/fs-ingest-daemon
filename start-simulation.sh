@@ -6,6 +6,7 @@ TARGET_DIR="./data"
 RATE="1s" # Slowed down slightly to be readable
 DB_PATH="./fsd.db"
 LOG_FILE="./simulation.log"
+CATEGORIES=${1:-""} # Optional categories to filter, e.g., "bottle,cable, capsule, carpet, grid, hazelnut, metal_nut"
 
 # Cleanup & Build
 echo "--- CLEANUP ---"
@@ -42,16 +43,22 @@ sleep 2 # Give daemon time to init watcher and DB
 
 # Start Simulator
 echo "--- STARTING SIMULATOR ---"
-echo "Source:  $SOURCE_DIR"
-echo "Target:  $TARGET_DIR"
-echo "Rate:    $RATE"
+echo "Source:     $SOURCE_DIR"
+echo "Target:     $TARGET_DIR"
+echo "Rate:       $RATE"
+if [ -n "$CATEGORIES" ]; then
+    echo "Categories: $CATEGORIES"
+fi
 echo "------------------------------------------------"
 
+# Build simulate command arguments
+SIM_ARGS=(simulate --source "$SOURCE_DIR" --target "$TARGET_DIR" --rate "$RATE")
+if [ -n "$CATEGORIES" ]; then
+    SIM_ARGS+=(--categories "$CATEGORIES")
+fi
+
 # Redirect simulator output to log file
-./fsd simulate \
-    --source "$SOURCE_DIR" \
-    --target "$TARGET_DIR" \
-    --rate "$RATE" >> "$LOG_FILE" 2>&1 &
+./fsd "${SIM_ARGS[@]}" >> "$LOG_FILE" 2>&1 &
 SIM_PID=$!
 echo "Simulator running with PID $SIM_PID (logs -> $LOG_FILE)"
 
