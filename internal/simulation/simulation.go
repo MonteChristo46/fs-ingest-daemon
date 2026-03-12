@@ -72,6 +72,9 @@ func (s *Simulator) scanSourceDir() error {
 		if err != nil {
 			return err
 		}
+		if info.IsDir() && info.Name() == "ground_truth" {
+			return filepath.SkipDir
+		}
 		if info.IsDir() {
 			return nil
 		}
