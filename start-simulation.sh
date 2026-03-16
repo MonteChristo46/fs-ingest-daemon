@@ -6,7 +6,7 @@ TARGET_DIR="$HOME/fsd/data"
 RATE="1s"
 DB_PATH="$HOME/fsd/fsd.db"
 LOG_FILE="./simulation.log"
-CATEGORIES=${1:-""} # Optional categories to filter
+CATEGORIES=${1:-"bottle"} # Optional categories to filter
 
 echo "--- CLEANUP ---"
 echo "Cleaning up $TARGET_DIR..."
