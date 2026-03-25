@@ -19,25 +19,36 @@ var DefaultCategories = []string{
 	"cam_1", "cam_2", "cam_3", "cam_4", "cam_5",
 }
 
+// Variables for directory structure randomization
+var (
+	Factories = []string{"munich", "berlin", "stuttgart"}
+	Lines     = []string{"line_a", "line_b", "line_c"}
+)
+
 type Config struct {
 	SourceDir  string        // If empty, use synthetic mode
 	TargetDir  string        // Where to drop files
 	Rate       time.Duration // Interval between files
+	DefectRate float64       // Probability of generating a defect image (0.0 to 1.0)
+	Jitter     float64       // Variance in rate (e.g. 0.2 for +/- 20%)
+	Nested     bool          // Whether to generate nested directories (e.g. factory/line/category)
 	Categories []string      // Optional list of specific categories to simulate
 	Logger     *slog.Logger
 }
 
 type Simulator struct {
-	cfg        Config
-	categories []string
-	imageFiles map[string][]string // category -> list of file paths
+	cfg         Config
+	categories  []string
+	goodFiles   map[string][]string // category -> list of good file paths
+	defectFiles map[string][]string // category -> list of defect file paths
 }
 
 func New(cfg Config) (*Simulator, error) {
 	s := &Simulator{
-		cfg:        cfg,
-		categories: DefaultCategories,
-		imageFiles: make(map[string][]string),
+		cfg:         cfg,
+		categories:  DefaultCategories,
+		goodFiles:   make(map[string][]string),
+		defectFiles: make(map[string][]string),
 	}
 
 	if len(cfg.Categories) > 0 {
@@ -96,7 +107,11 @@ func (s *Simulator) scanSourceDir() error {
 		if len(parts) > 1 {
 			category := parts[0]
 			if len(allowedCategories) == 0 || allowedCategories[category] {
-				s.imageFiles[category] = append(s.imageFiles[category], path)
+				if strings.Contains(strings.ToLower(path), string(os.PathSeparator)+"good"+string(os.PathSeparator)) {
+					s.goodFiles[category] = append(s.goodFiles[category], path)
+				} else {
+					s.defectFiles[category] = append(s.defectFiles[category], path)
+				}
 				foundCategories[category] = true
 			}
 		}
@@ -127,28 +142,46 @@ func (s *Simulator) scanSourceDir() error {
 func (s *Simulator) Run(ctx context.Context) error {
 	s.cfg.Logger.Info("Starting simulation",
 		"rate", s.cfg.Rate,
+		"defect_rate", s.cfg.DefectRate,
+		"jitter", s.cfg.Jitter,
 		"target", s.cfg.TargetDir,
 		"mode", s.modeName(),
 	)
 
-	ticker := time.NewTicker(s.cfg.Rate)
-	defer ticker.Stop()
+	timer := time.NewTimer(s.nextInterval())
+	defer timer.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			s.cfg.Logger.Info("Stopping simulation")
 			return nil
-		case <-ticker.C:
+		case <-timer.C:
 			if err := s.generateFile(); err != nil {
 				s.cfg.Logger.Error("Failed to generate file", "error", err)
 			}
+			timer.Reset(s.nextInterval())
 		}
 	}
 }
 
+func (s *Simulator) nextInterval() time.Duration {
+	base := float64(s.cfg.Rate)
+	if s.cfg.Jitter <= 0 {
+		return s.cfg.Rate
+	}
+
+	variance := ((rand.Float64() * 2.0) - 1.0) * s.cfg.Jitter
+	newDuration := time.Duration(base * (1.0 + variance))
+
+	if newDuration <= 0 {
+		return time.Millisecond
+	}
+	return newDuration
+}
+
 func (s *Simulator) modeName() string {
-	if len(s.imageFiles) > 0 {
+	if len(s.goodFiles) > 0 || len(s.defectFiles) > 0 {
 		return "Replay"
 	}
 	return "Synthetic"
@@ -163,15 +196,57 @@ func (s *Simulator) generateFile() error {
 	var content []byte
 	var ext string = ".png" // Default for synthetic
 
-	if files, ok := s.imageFiles[category]; ok && len(files) > 0 {
+	isDefect := rand.Float64() < s.cfg.DefectRate
+	var files []string
+
+	if isDefect {
+		files = s.defectFiles[category]
+		if len(files) == 0 {
+			files = s.goodFiles[category]
+			isDefect = false
+		}
+	} else {
+		files = s.goodFiles[category]
+		if len(files) == 0 {
+			files = s.defectFiles[category]
+			isDefect = true
+		}
+	}
+
+	if len(files) > 0 {
 		sourcePath = files[rand.Intn(len(files))]
 		ext = filepath.Ext(sourcePath)
 	}
 
-	// 3. Construct target path
-	// Structure: target/category/filename
+	// 3. Construct target path with randomized structure
+	// If nested is false, depth is 0
+	// Else randomly pick a structure depth:
+	// 0: <category>
+	// 1: <factory>/<category>
+	// 2: <factory>/<line>/<category>
+	var depth int
+	if s.cfg.Nested {
+		depth = rand.Intn(3)
+	} else {
+		depth = 0
+	}
+	
+	var factory, line string
+	var pathParts []string
+
+	if depth >= 1 {
+		factory = Factories[rand.Intn(len(Factories))]
+		pathParts = append(pathParts, factory)
+	}
+	if depth >= 2 {
+		line = Lines[rand.Intn(len(Lines))]
+		pathParts = append(pathParts, line)
+	}
+	
+	pathParts = append(pathParts, category)
+	
 	filename := fmt.Sprintf("%s%s", uuid.New().String(), ext)
-	targetDir := filepath.Join(s.cfg.TargetDir, category)
+	targetDir := filepath.Join(s.cfg.TargetDir, filepath.Join(pathParts...))
 	targetPath := filepath.Join(targetDir, filename)
 
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
@@ -219,9 +294,32 @@ func (s *Simulator) generateFile() error {
 	// We only do this for images (to avoid sidecars for sidecars)
 	if !strings.HasSuffix(targetPath, ".json") {
 		jsonPath := targetPath + ".json"
-		// Simple dummy context
-		jsonContent := []byte(fmt.Sprintf(`{"simulation": true, "category": %q, "timestamp": %q}`,
-			category, time.Now().Format(time.RFC3339)))
+		// Build JSON context dynamically
+		contextMap := map[string]interface{}{
+			"simulation": true,
+			"category":   category,
+			"is_defect":  isDefect,
+			"timestamp":  time.Now().Format(time.RFC3339),
+		}
+		if factory != "" {
+			contextMap["factory"] = factory
+		}
+		if line != "" {
+			contextMap["line"] = line
+		}
+		
+		// Encode to JSON string manually to keep it simple, or use a quick format
+		// since the map is small and simple. Let's build the string manually for simplicity.
+		var jsonParts []string
+		for k, v := range contextMap {
+			switch val := v.(type) {
+			case string:
+				jsonParts = append(jsonParts, fmt.Sprintf(`"%s": %q`, k, val))
+			case bool:
+				jsonParts = append(jsonParts, fmt.Sprintf(`"%s": %t`, k, val))
+			}
+		}
+		jsonContent := []byte(fmt.Sprintf("{%s}", strings.Join(jsonParts, ", ")))
 
 		if err := os.WriteFile(jsonPath, jsonContent, 0644); err != nil {
 			return fmt.Errorf("failed to write sidecar file: %w", err)

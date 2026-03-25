@@ -19,6 +19,9 @@ func SimulateCmd(logger *slog.Logger) *cobra.Command {
 		sourceDir  string
 		targetDir  string
 		rate       time.Duration
+		defectRate float64
+		jitter     float64
+		nested     bool
 		categories []string
 	)
 
@@ -35,6 +38,9 @@ Two modes are supported:
 				SourceDir:  sourceDir,
 				TargetDir:  targetDir,
 				Rate:       rate,
+				DefectRate: defectRate,
+				Jitter:     jitter,
+				Nested:     nested,
 				Categories: categories,
 				Logger:     logger,
 			}
@@ -66,6 +72,9 @@ Two modes are supported:
 	cmd.Flags().StringVar(&sourceDir, "source", "", "Path to source images (optional, enables Replay mode)")
 	cmd.Flags().StringVar(&targetDir, "target", "./data", "Target directory to drop files")
 	cmd.Flags().DurationVar(&rate, "rate", 1*time.Second, "Interval between file generation (e.g., 500ms, 1s)")
+	cmd.Flags().Float64Var(&defectRate, "defect-rate", 0.1, "Probability of generating a defect image (0.0 to 1.0)")
+	cmd.Flags().Float64Var(&jitter, "jitter", 0.2, "Variance in generation rate (e.g., 0.2 for +/- 20%)")
+	cmd.Flags().BoolVar(&nested, "nested", false, "Generate deep directory structure (factory/line/category/)")
 	cmd.Flags().StringSliceVar(&categories, "categories", nil, "Comma-separated list of categories to simulate (e.g. bottle,cable). If empty, uses all found in source or default synthetic ones.")
 
 	return cmd
