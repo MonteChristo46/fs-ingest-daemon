@@ -8,7 +8,7 @@ LOG_FILE="./simulation.log"
 
 DEFECT_RATE="0.1"
 JITTER="0.2"
-NESTED="true"
+NESTED="false"
 
 # Example: Run multiple categories with varying rates
 # If argument is provided, just run that one category with a default rate
@@ -17,7 +17,7 @@ if [ -n "$1" ]; then
 else
     # Default multi-category simulation
     CATEGORY_CONFIGS=(
-        "wood:1s"
+        "wood:500ms"
         #"metal_nut:2s"
         #"bottle:500ms"
         #"cable:1s"
