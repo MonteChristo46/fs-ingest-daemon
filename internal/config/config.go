@@ -49,7 +49,7 @@ var (
 	DefaultMaxDataSizeGB             = 1.0
 	DefaultIngestCheckInterval       = "20ms"
 	DefaultIngestBatchSize           = 10
-	DefaultIngestWorkerCount         = 5
+	DefaultIngestWorkerCount         = 2
 	DefaultPruneCheckInterval        = "1m"
 	DefaultPruneBatchSize            = 50
 	DefaultPruneHighWatermarkPercent = 90
@@ -63,7 +63,7 @@ var (
 	DefaultLogMaxBackups             = 1
 	DefaultLogMaxAgeDays             = 28
 	DefaultLogCompress               = true
-	DefaultAllowedExtensions         = []string{".jpg", ".jpeg", ".png", ".json"}
+	DefaultAllowedExtensions         = []string{".png", ".json", ".jpg", ".jpeg"}
 	DefaultImageCompressionEnabled   = true
 	DefaultImageMaxDimensionPx       = 800
 	DefaultImageCompressionQuality   = 80
