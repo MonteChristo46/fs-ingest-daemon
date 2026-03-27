@@ -17,19 +17,19 @@ if [ -n "$1" ]; then
 else
     # Default multi-category simulation
     CATEGORY_CONFIGS=(
-        "wood:1s"
-        #"metal_nut:2s"
-        #"bottle:5s"
-        #"cable:5s"
-        #"capsule:5s"
-        #"hazelnut:5s"
-        #"zipper:10s"
-        #"leather:10s"
-        #"screw:10s"
-        #"tile:30s"
-        #"toothbrush:30s"
-        #"transistor:30s"
-        #"grid:60s"
+        "wood:5s"
+        "metal_nut:2s"
+        "bottle:5s"
+        "cable:5s"
+        "capsule:5s"
+        "hazelnut:5s"
+        "zipper:10s"
+        "leather:10s"
+        "screw:10s"
+        "tile:30s"
+        "toothbrush:30s"
+        "transistor:30s"
+        "grid:60s"
     )
 fi
 

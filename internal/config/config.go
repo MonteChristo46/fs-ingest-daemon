@@ -65,7 +65,7 @@ var (
 	DefaultLogCompress               = true
 	DefaultAllowedExtensions         = []string{".png", ".json", ".jpg", ".jpeg"}
 	DefaultImageCompressionEnabled   = true
-	DefaultImageMaxDimensionPx       = 800
+	DefaultImageMaxDimensionPx       = 400
 	DefaultImageCompressionQuality   = 80
 )
 
