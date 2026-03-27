@@ -6,7 +6,7 @@ TARGET_DIR="$HOME/fsd/data"
 DB_PATH="$HOME/fsd/fsd.db"
 LOG_FILE="./simulation.log"
 
-DEFECT_RATE="0.01"
+DEFECT_RATE="0.08"
 JITTER="0.2"
 NESTED="false"
 
@@ -17,19 +17,19 @@ if [ -n "$1" ]; then
 else
     # Default multi-category simulation
     CATEGORY_CONFIGS=(
-        "wood:5s"
-        "metal_nut:2s"
-        "bottle:5s"
-        "cable:5s"
-        "capsule:5s"
-        "hazelnut:5s"
-        "zipper:10s"
-        "leather:10s"
-        "screw:10s"
-        "tile:30s"
-        "toothbrush:30s"
-        "transistor:30s"
-        "grid:60s"
+        "wood:10s"
+        "metal_nut:20s"
+        "bottle:50s"
+        "cable:50s"
+        "capsule:50s"
+        "hazelnut:10s"
+        #"zipper:10s"
+        #"leather:10s"
+        #"screw:10s"
+        #"tile:30s"
+        #"toothbrush:30s"
+        #"transistor:30s"
+        #"grid:60s"
     )
 fi
 
