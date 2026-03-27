@@ -119,6 +119,11 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
+	// Ensure AllowedExtensions is not empty (handles null or [] in JSON)
+	if len(cfg.AllowedExtensions) == 0 {
+		cfg.AllowedExtensions = DefaultAllowedExtensions
+	}
+
 	// Helper to resolve relative paths against executable directory
 	resolvePath := func(p string) string {
 		if p == "" {
