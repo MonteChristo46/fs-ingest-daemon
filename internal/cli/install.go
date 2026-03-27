@@ -33,14 +33,14 @@ func getDefaultInstallDir() string {
 			home, _ := os.UserHomeDir()
 			return filepath.Join(home, "fsd")
 		}
-		// Ideally we want AppData/Local, but UserConfigDir is usually Roaming. 
+		// Ideally we want AppData/Local, but UserConfigDir is usually Roaming.
 		// Let's check env var specifically for Local
 		if local := os.Getenv("LOCALAPPDATA"); local != "" {
 			return filepath.Join(local, "fsd")
 		}
 		return filepath.Join(localAppData, "fsd")
 	}
-	
+
 	// Linux / macOS
 	if isAdmin() {
 		return "/opt/fsd"
@@ -257,7 +257,7 @@ func InstallCmd(s service.Service) *cobra.Command {
 					fmt.Println("\nWaiting for device to be claimed (Ctrl+C to skip)...")
 
 					// Poll loop
-				ticker := time.NewTicker(5 * time.Second)
+					ticker := time.NewTicker(5 * time.Second)
 					defer ticker.Stop()
 
 					paired := false
@@ -272,13 +272,13 @@ func InstallCmd(s service.Service) *cobra.Command {
 
 							if statusResp.Status == api.PairingStatusClaimed {
 								fmt.Println("\n✅ Device successfully claimed!")
-							if statusResp.APIKey != nil {
-								cfg.AuthToken = *statusResp.APIKey
-							} else {
-								cfg.AuthToken = "provisioned"
-							}
+								if statusResp.APIKey != nil {
+									cfg.AuthToken = *statusResp.APIKey
+								} else {
+									cfg.AuthToken = "provisioned"
+								}
 
-							// Save updated config
+								// Save updated config
 								if err := config.Save(targetConfigPath, cfg); err != nil {
 									fmt.Printf("❌ Error saving paired config: %v\n", err)
 								}
@@ -286,8 +286,8 @@ func InstallCmd(s service.Service) *cobra.Command {
 								break pollLoop
 							} else if statusResp.Status == api.PairingStatusExpired {
 								fmt.Println("\n❌ Pairing code expired.")
-							break pollLoop
-						}
+								break pollLoop
+							}
 						}
 					}
 

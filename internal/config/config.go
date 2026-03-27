@@ -37,6 +37,9 @@ type Config struct {
 	LogMaxAgeDays             int      `json:"log_max_age_days"`             // Max number of days to keep old files. Default 28.
 	LogCompress               bool     `json:"log_compress"`                 // Whether to compress old files. Default true.
 	AllowedExtensions         []string `json:"allowed_extensions"`           // List of allowed file extensions (e.g. [".jpg", ".json"])
+	ImageCompressionEnabled   bool     `json:"image_compression_enabled"`    // Whether to resize and compress images before upload.
+	ImageMaxDimensionPx       int      `json:"image_max_dimension_px"`       // Max dimension (width or height) in pixels.
+	ImageCompressionQuality   int      `json:"image_compression_quality"`    // JPEG compression quality (1-100).
 }
 
 var (
@@ -61,6 +64,9 @@ var (
 	DefaultLogMaxAgeDays             = 28
 	DefaultLogCompress               = true
 	DefaultAllowedExtensions         = []string{".jpg", ".jpeg", ".png", ".json"}
+	DefaultImageCompressionEnabled   = true
+	DefaultImageMaxDimensionPx       = 800
+	DefaultImageCompressionQuality   = 80
 )
 
 // Load reads the configuration from the specified path.
@@ -92,6 +98,9 @@ func Load(path string) (*Config, error) {
 		LogMaxAgeDays:             DefaultLogMaxAgeDays,
 		LogCompress:               DefaultLogCompress,
 		AllowedExtensions:         DefaultAllowedExtensions,
+		ImageCompressionEnabled:   DefaultImageCompressionEnabled,
+		ImageMaxDimensionPx:       DefaultImageMaxDimensionPx,
+		ImageCompressionQuality:   DefaultImageCompressionQuality,
 	}
 
 	f, err := os.Open(path)

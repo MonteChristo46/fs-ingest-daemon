@@ -1,12 +1,14 @@
 package ingest
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"fs-ingest-daemon/internal/api"
 	"fs-ingest-daemon/internal/config"
+	"fs-ingest-daemon/internal/imageutil"
 	"fs-ingest-daemon/internal/store"
 	"fs-ingest-daemon/internal/util"
 	"io"
@@ -15,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -179,23 +182,47 @@ func (u *Uploader) Process(f store.FileRecord) {
 
 // uploadFile performs a PUT request to upload the file content to the destination URL.
 func (u *Uploader) uploadFile(url, path string) error {
-	file, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
-	}
-	defer file.Close()
+	var bodyReader io.Reader
+	var contentLength int64
 
-	info, err := file.Stat()
-	if err != nil {
-		return fmt.Errorf("failed to stat file: %w", err)
+	ext := strings.ToLower(filepath.Ext(path))
+	isCompressibleImage := ext == ".jpg" || ext == ".jpeg" || ext == ".png"
+
+	if u.cfg.ImageCompressionEnabled && isCompressibleImage {
+		u.logger.Debug("Compressing image before upload", "path", path)
+		compressedData, err := imageutil.CompressImage(path, u.cfg.ImageMaxDimensionPx, u.cfg.ImageCompressionQuality)
+		if err != nil {
+			u.logger.Warn("Failed to compress image, falling back to original file", "path", path, "error", err)
+			// fallback to original file if compression fails
+		} else {
+			bodyReader = bytes.NewReader(compressedData)
+			contentLength = int64(len(compressedData))
+		}
 	}
 
-	req, err := http.NewRequest("PUT", url, file)
+	// If bodyReader is still nil, open the original file
+	if bodyReader == nil {
+		file, err := os.Open(path)
+		if err != nil {
+			return fmt.Errorf("failed to open file: %w", err)
+		}
+		defer file.Close()
+
+		info, err := file.Stat()
+		if err != nil {
+			return fmt.Errorf("failed to stat file: %w", err)
+		}
+
+		bodyReader = file
+		contentLength = info.Size()
+	}
+
+	req, err := http.NewRequest("PUT", url, bodyReader)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.ContentLength = info.Size()
+	req.ContentLength = contentLength
 	req.Header.Set("Content-Type", "application/octet-stream")
 
 	resp, err := u.apiClient.HTTPClient.Do(req)

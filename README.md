@@ -153,6 +153,9 @@ The configuration file is generated at install time (e.g., `/opt/fsd/config.json
 | `api_timeout` | Timeout duration for HTTP requests to the Cloud API. | `"30s"` |
 | `debounce_duration` | Wait time after file write before processing (prevents partial reads). | `"500ms"` |
 | `orphan_check_interval` | Time before a waiting file is marked as ORPHAN (uploaded without partner). | `"5m"` |
+| `image_compression_enabled` | Whether to resize and compress images before upload (JPEG/PNG). | `true` |
+| `image_max_dimension_px` | Maximum dimension (width or height) in pixels for resized images. | `800` |
+| `image_compression_quality` | JPEG compression quality (1-100). | `80` |
 | `metadata_update_interval` | Frequency of sending system info (OS, Uptime, IP) to the API. | `"24h"` |
 | `web_client_url` | URL displayed in the QR code for device claiming. | `(Default Cloud URL)` |
 | `log_max_size_mb` | Max size in MB before log rotation. | `10` |

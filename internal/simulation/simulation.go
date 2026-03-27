@@ -230,7 +230,7 @@ func (s *Simulator) generateFile() error {
 	} else {
 		depth = 0
 	}
-	
+
 	var factory, line string
 	var pathParts []string
 
@@ -242,9 +242,9 @@ func (s *Simulator) generateFile() error {
 		line = Lines[rand.Intn(len(Lines))]
 		pathParts = append(pathParts, line)
 	}
-	
+
 	pathParts = append(pathParts, category)
-	
+
 	filename := fmt.Sprintf("%s%s", uuid.New().String(), ext)
 	targetDir := filepath.Join(s.cfg.TargetDir, filepath.Join(pathParts...))
 	targetPath := filepath.Join(targetDir, filename)
@@ -307,7 +307,7 @@ func (s *Simulator) generateFile() error {
 		if line != "" {
 			contextMap["line"] = line
 		}
-		
+
 		// Encode to JSON string manually to keep it simple, or use a quick format
 		// since the map is small and simple. Let's build the string manually for simplicity.
 		var jsonParts []string

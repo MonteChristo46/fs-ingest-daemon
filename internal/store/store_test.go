@@ -48,7 +48,7 @@ func TestRemoveFileUnlinksPartner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get pending files: %v", err)
 	}
-	
+
 	// Should be 2 files
 	if len(files) != 2 {
 		t.Errorf("Expected 2 pending files, got %d", len(files))
