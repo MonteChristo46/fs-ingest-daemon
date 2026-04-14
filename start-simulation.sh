@@ -6,9 +6,9 @@ TARGET_DIR="$HOME/fsd/data"
 DB_PATH="$HOME/fsd/fsd.db"
 LOG_FILE="./simulation.log"
 
-DEFECT_RATE="0.08"
+DEFECT_RATE="1.0"
 JITTER="0.2"
-NESTED="false"
+NESTED="true"
 
 # Example: Run multiple categories with varying rates
 # If argument is provided, just run that one category with a default rate
@@ -17,12 +17,12 @@ if [ -n "$1" ]; then
 else
     # Default multi-category simulation
     CATEGORY_CONFIGS=(
-        "wood:10s"
-        "metal_nut:20s"
-        "bottle:50s"
-        "cable:50s"
-        "capsule:50s"
-        "hazelnut:10s"
+        "wood:0.5s"
+        #"metal_nut:1s"
+        #"bottle:1s"
+        #"cable:1s"
+        #"capsule:1s"
+        #"hazelnut:1s"
         #"zipper:10s"
         #"leather:10s"
         #"screw:10s"
