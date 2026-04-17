@@ -8,7 +8,7 @@ LOG_FILE="./simulation.log"
 
 DEFECT_RATE="1.0"
 JITTER="0.2"
-NESTED="true"
+NESTED="false"
 
 # Example: Run multiple categories with varying rates
 # If argument is provided, just run that one category with a default rate
