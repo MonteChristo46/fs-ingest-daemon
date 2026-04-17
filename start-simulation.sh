@@ -6,7 +6,7 @@ TARGET_DIR="$HOME/fsd/data"
 DB_PATH="$HOME/fsd/fsd.db"
 LOG_FILE="./simulation.log"
 
-DEFECT_RATE="0.01"
+DEFECT_RATE="1.0"
 JITTER="0.2"
 NESTED="true"
 
