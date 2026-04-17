@@ -4,9 +4,9 @@ $ErrorActionPreference = "Stop"
 
 # Configuration
 # URL to the raw executable on GitHub
-$Url = "https://github.com/MonteChristo46/fs-ingest-daemon/raw/main/fsd.exe"
-$InstallDir = "C:\ProgramData\fsd"
-$BinName = "fsd.exe"
+$Url = "https://github.com/MonteChristo46/fs-ingest-daemon/raw/main/hunt.exe"
+$InstallDir = "C:\ProgramData\hunt"
+$BinName = "hunt.exe"
 
 # 1. Check Privileges
 
@@ -20,7 +20,7 @@ if ($IsAdmin) {
 
     Write-Host "Running as ADMINISTRATOR (System Install)"
 
-    $InstallDir = "C:\ProgramData\fsd"
+    $InstallDir = "C:\ProgramData\hunt"
 
     $PathScope = "Machine"
 
@@ -28,7 +28,7 @@ if ($IsAdmin) {
 
     Write-Host "Running as USER (User Install)"
 
-    $InstallDir = Join-Path $env:LOCALAPPDATA "fsd"
+    $InstallDir = Join-Path $env:LOCALAPPDATA "hunt"
 
     $PathScope = "User"
 
@@ -62,9 +62,7 @@ if (-not (Test-Path -Path $InstallDir)) {
 
 # Fix Permissions: Ensure users can read/execute in this directory
 
-
-
-# (Important for ProgramData installs so non-admins can at least run 'fsd version' or see logs if allowed)
+# (Important for ProgramData installs so non-admins can at least run 'hunt version' or see logs if allowed)
 
 
 
@@ -155,7 +153,7 @@ if ($CurrentPath -notlike "*$InstallDir*") {
 
 
 # 5. Run Install
-Write-Host "Running fsd install..."
+Write-Host "Running hunt install..."
 & $Target install
 
 Write-Host "`n✅ Installation wrapper complete."

@@ -2,8 +2,8 @@
 
 # Configuration
 SOURCE_DIR="./test-data/mvtec_anomaly_detection"
-TARGET_DIR="$HOME/fsd/data"
-DB_PATH="$HOME/fsd/fsd.db"
+TARGET_DIR="$HOME/hunt/data"
+DB_PATH="$HOME/hunt/hunt.db"
 LOG_FILE="./simulation.log"
 
 DEFECT_RATE="1.0"
@@ -42,7 +42,7 @@ rm -rf "$TARGET_DIR"/*
 mkdir -p "$TARGET_DIR"
 
 echo "--- BUILD ---"
-go build -o fsd ./cmd/fsd/main.go || { echo "Build failed"; exit 1; }
+go build -o hunt ./cmd/hunt/main.go || { echo "Build failed"; exit 1; }
 
 # Array to keep track of simulator process PIDs
 SIM_PIDS=()
@@ -76,7 +76,7 @@ for config in "${CATEGORY_CONFIGS[@]}"; do
     rate="${config#*:}"
     
     echo "Starting simulation for category '$category' at rate '$rate'"
-    ./fsd simulate \
+    ./hunt simulate \
         --source "$SOURCE_DIR" \
         --target "$TARGET_DIR" \
         --rate "$rate" \
@@ -93,7 +93,7 @@ echo "Simulators running with PIDs: ${SIM_PIDS[*]} (logs -> $LOG_FILE)"
 
 # Tail the logs so we can see what's happening
 # We tail both the simulation log and the daemon log (if it exists)
-DAEMON_LOG="$HOME/fsd/fsd.log"
+DAEMON_LOG="$HOME/hunt/hunt.log"
 tail -f "$LOG_FILE" "$DAEMON_LOG" 2>/dev/null &
 TAIL_PID=$!
 
@@ -104,3 +104,6 @@ done
 
 # Kill tail on exit
 kill "$TAIL_PID" 2>/dev/null
+
+
+

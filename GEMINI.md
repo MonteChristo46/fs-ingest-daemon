@@ -59,6 +59,6 @@ Download: Grab the binary for the specific OS.
 
 Config: Fill in endpoint and max_size in the config file.
 
-Install: Run ./fsd install.
+Install: Run ./hunt install.
 
-Monitor: Run ./fsd status.
+Monitor: Run ./hunt status.

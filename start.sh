@@ -1,1 +1,1 @@
-go build -o fsd ./cmd/fsd && ./fsd run
+go build -o hunt ./cmd/hunt && ./hunt run

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-ROOT_DIR=${1:-"$HOME/fsd/data"}
+ROOT_DIR=${1:-"$HOME/hunt/data"}
 TEST_DATA_DIR=${2:-"./test-data"}
 NUM_SOURCES=${3:-5}    # Renamed from NUM_CAMS
 FILES_PER_SOURCE=${4:-20} # Renamed from FILES_PER_CAM
@@ -29,10 +29,10 @@ if [ -z "$MODE" ]; then
     esac
 fi
 
-# Check if fs-ingest-daemon is running
-if ! pgrep -x "fsd" > /dev/null; then
-    echo "Error: 'fsd' service is NOT running."
-    echo "Please start the daemon first: ./fsd start (or ./fsd run)"
+# Check if daemon is running
+if ! pgrep -x "hunt" > /dev/null; then
+    echo "Error: 'hunt' service is NOT running."
+    echo "Please start the daemon first: ./hunt start (or ./hunt run)"
     exit 1
 fi
 
@@ -41,7 +41,7 @@ echo "FS Ingest Daemon - Stress Test Generator"
 echo "------------------------------------------------"
 
 # Define Target Directories
-TARGET_DIRS=("$ROOT_DIR" "./fsd-watch")
+TARGET_DIRS=("$ROOT_DIR" "./hunt-watch")
 
 echo "Targets: ${TARGET_DIRS[*]}"
 echo "Source: $TEST_DATA_DIR"

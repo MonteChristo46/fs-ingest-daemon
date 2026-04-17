@@ -13,7 +13,7 @@ import (
 
 func TestLogRotator_Rotate(t *testing.T) {
 	// Create temp dir
-	tmpDir, err := os.MkdirTemp("", "fsd-log-test")
+	tmpDir, err := os.MkdirTemp("", "hunt-log-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestLogRotator_Rotate(t *testing.T) {
 }
 
 func TestLogRotator_Cleanup(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "fsd-log-cleanup")
+	tmpDir, err := os.MkdirTemp("", "hunt-log-cleanup")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestLogRotator_Cleanup(t *testing.T) {
 }
 
 func TestLogRotator_Compression(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "fsd-log-compress")
+	tmpDir, err := os.MkdirTemp("", "hunt-log-compress")
 	if err != nil {
 		t.Fatal(err)
 	}

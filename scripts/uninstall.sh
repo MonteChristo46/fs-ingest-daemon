@@ -7,16 +7,16 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 
 if [ "$IS_ROOT" -eq 1 ]; then
-    INSTALL_DIR="/opt/fsd"
-    SYMLINK_PATH="/usr/local/bin/fsd"
+    INSTALL_DIR="/opt/hunt"
+    SYMLINK_PATH="/usr/local/bin/hunt"
     echo "Uninstalling System Service (ROOT)..."
 else
-    INSTALL_DIR="$HOME/fsd"
+    INSTALL_DIR="$HOME/hunt"
     # Try to guess symlink location
-    if [ -f "$HOME/.local/bin/fsd" ]; then
-        SYMLINK_PATH="$HOME/.local/bin/fsd"
-    elif [ -f "$HOME/bin/fsd" ]; then
-        SYMLINK_PATH="$HOME/bin/fsd"
+    if [ -f "$HOME/.local/bin/hunt" ]; then
+        SYMLINK_PATH="$HOME/.local/bin/hunt"
+    elif [ -f "$HOME/bin/hunt" ]; then
+        SYMLINK_PATH="$HOME/bin/hunt"
     else
         SYMLINK_PATH=""
     fi
@@ -25,10 +25,10 @@ fi
 
 echo "Stopping and uninstalling service..."
 # If the binary exists, use it to uninstall the service first
-if [ -x "$INSTALL_DIR/fsd" ]; then
-    "$INSTALL_DIR/fsd" uninstall || echo "Warning: Service uninstall returned error (might not be running)"
-elif command -v fsd >/dev/null 2>&1; then
-    fsd uninstall || echo "Warning: Service uninstall returned error"
+if [ -x "$INSTALL_DIR/hunt" ]; then
+    "$INSTALL_DIR/hunt" uninstall || echo "Warning: Service uninstall returned error (might not be running)"
+elif command -v hunt >/dev/null 2>&1; then
+    hunt uninstall || echo "Warning: Service uninstall returned error"
 fi
 
 if [ -n "$SYMLINK_PATH" ] && [ -L "$SYMLINK_PATH" ]; then

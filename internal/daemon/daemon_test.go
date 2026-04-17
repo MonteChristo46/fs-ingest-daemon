@@ -24,7 +24,7 @@ func TestDaemonInitialScan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dbPath := filepath.Join(tmpDir, "fsd.db")
+	dbPath := filepath.Join(tmpDir, "hunt.db")
 
 	cfg := &config.Config{
 		DeviceID:            "test-dev",
@@ -116,7 +116,7 @@ func TestDaemonNoSidecarStrategy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dbPath := filepath.Join(tmpDir, "fsd.db")
+	dbPath := filepath.Join(tmpDir, "hunt.db")
 
 	cfg := &config.Config{
 		DeviceID:            "test-dev",

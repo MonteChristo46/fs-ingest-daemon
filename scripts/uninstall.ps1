@@ -1,8 +1,8 @@
 # Requires RunAsAdministrator
 
 $ErrorActionPreference = "Stop"
-$InstallDir = "C:\ProgramData\fsd"
-$BinName = "fsd.exe"
+$InstallDir = "C:\ProgramData\hunt"
+$BinName = "hunt.exe"
 
 # 1. Check Privileges
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -10,15 +10,15 @@ $IsAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::A
 
 if ($IsAdmin) {
     Write-Host "Uninstalling System Service (ADMIN)..."
-    $InstallDir = "C:\ProgramData\fsd"
+    $InstallDir = "C:\ProgramData\hunt"
     $PathScope = "Machine"
 } else {
     Write-Host "Uninstalling User Service..."
-    $InstallDir = Join-Path $env:LOCALAPPDATA "fsd"
+    $InstallDir = Join-Path $env:LOCALAPPDATA "hunt"
     $PathScope = "User"
 }
 
-$BinName = "fsd.exe"
+$BinName = "hunt.exe"
 
 # 2. Uninstall Service
 $Target = Join-Path $InstallDir $BinName

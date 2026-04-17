@@ -92,7 +92,7 @@ func main() {
 	// Use LogPath from config
 	logPath := cfg.LogPath
 	if logPath == "" {
-		logPath = filepath.Join(filepath.Dir(ex), "fsd.log")
+		logPath = filepath.Join(filepath.Dir(ex), "hunt.log")
 	}
 
 	// Initialize LogRotator

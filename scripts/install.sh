@@ -3,10 +3,10 @@ set -e
 
 # Configuration
 # URL to the raw binary on GitHub
-DOWNLOAD_URL="https://github.com/MonteChristo46/fs-ingest-daemon/raw/main/fsd"
-INSTALL_DIR="/opt/fsd"
-BIN_NAME="fsd"
-SYMLINK_PATH="/usr/local/bin/fsd"
+DOWNLOAD_URL="https://github.com/MonteChristo46/fs-ingest-daemon/raw/main/hunt"
+INSTALL_DIR="/opt/hunt"
+BIN_NAME="hunt"
+SYMLINK_PATH="/usr/local/bin/hunt"
 
 # Detect OS and Arch
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -32,11 +32,11 @@ fi
 # Define Paths based on Privilege
 if [ "$IS_ROOT" -eq 1 ]; then
     echo "Running as ROOT (System Install)"
-    INSTALL_DIR="/opt/fsd"
+    INSTALL_DIR="/opt/hunt"
     SYMLINK_DIR="/usr/local/bin"
 else
     echo "Running as USER (User Install)"
-    INSTALL_DIR="$HOME/fsd"
+    INSTALL_DIR="$HOME/hunt"
     # Try standard user bin locations
     if [ -d "$HOME/.local/bin" ]; then
         SYMLINK_DIR="$HOME/.local/bin"
@@ -89,12 +89,12 @@ if [ -n "$SYMLINK_DIR" ]; then
     fi
 else
     echo "ℹ️  No standard bin directory found ($HOME/.local/bin or $HOME/bin)."
-    echo "   Please add $INSTALL_DIR to your PATH to run 'fsd' from anywhere."
+    echo "   Please add $INSTALL_DIR to your PATH to run 'hunt' from anywhere."
     echo "   Example: export PATH=\"\$PATH:$INSTALL_DIR\""
 fi
 
 # Run Installer
-echo "Running fsd install..."
+echo "Running hunt install..."
 # We redirect stdin from /dev/tty to ensure interactive prompts work
 # even when the script is piped via curl
 if [ -t 0 ]; then
@@ -111,4 +111,4 @@ fi
 
 echo ""
 echo "✅ Installation wrapper complete."
-echo "You can now use 'fsd' from anywhere."
+echo "You can now use 'hunt' from anywhere."

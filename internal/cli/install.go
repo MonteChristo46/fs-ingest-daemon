@@ -25,28 +25,28 @@ import (
 func getDefaultInstallDir() string {
 	if runtime.GOOS == "windows" {
 		if isAdmin() {
-			return `C:\ProgramData\fsd`
+			return `C:\ProgramData\hunt`
 		}
 		// Use LocalAppData for non-admin users
 		localAppData, err := os.UserConfigDir() // usually AppData/Roaming, but fine for now or we use Env
 		if err != nil {
 			home, _ := os.UserHomeDir()
-			return filepath.Join(home, "fsd")
+			return filepath.Join(home, "hunt")
 		}
 		// Ideally we want AppData/Local, but UserConfigDir is usually Roaming.
 		// Let's check env var specifically for Local
 		if local := os.Getenv("LOCALAPPDATA"); local != "" {
-			return filepath.Join(local, "fsd")
+			return filepath.Join(local, "hunt")
 		}
-		return filepath.Join(localAppData, "fsd")
+		return filepath.Join(localAppData, "hunt")
 	}
 
 	// Linux / macOS
 	if isAdmin() {
-		return "/opt/fsd"
+		return "/opt/hunt"
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, "fsd")
+	return filepath.Join(home, "hunt")
 }
 
 // Check if running as Admin/Root
@@ -117,7 +117,7 @@ func InstallCmd(s service.Service) *cobra.Command {
 				fmt.Println("   Installing a system service typically requires elevated privileges.")
 				if runtime.GOOS == "windows" {
 					fmt.Println("   On Windows, service registration will be SKIPPED if you continue.")
-					fmt.Println("   The application will be installed, but you must run it manually via 'fsd run'.")
+					fmt.Println("   The application will be installed, but you must run it manually via 'hunt run'.")
 				} else {
 					fmt.Println("   If this fails, please run with 'sudo'.")
 				}
@@ -207,8 +207,8 @@ func InstallCmd(s service.Service) *cobra.Command {
 					Endpoint:                userInputEndpoint,
 					MaxDataSizeGB:           config.DefaultMaxDataSizeGB,
 					WatchPath:               filepath.Join(targetDir, "data"),
-					LogPath:                 filepath.Join(targetDir, "fsd.log"),
-					DBPath:                  filepath.Join(targetDir, "fsd.db"),
+					LogPath:                 filepath.Join(targetDir, "hunt.log"),
+					DBPath:                  filepath.Join(targetDir, "hunt.db"),
 					IngestCheckInterval:     config.DefaultIngestCheckInterval,
 					IngestBatchSize:         config.DefaultIngestBatchSize,
 					IngestWorkerCount:       config.DefaultIngestWorkerCount,
@@ -322,7 +322,7 @@ func InstallCmd(s service.Service) *cobra.Command {
 
 			if realCurrent != realTarget {
 				fmt.Println("-> Registering service via installed binary...")
-				// Execute: /opt/fsd/fsd service-install
+				// Execute: /opt/hunt/hunt service-install
 				// We need a hidden command or just call 'install' again but from the new location?
 				// If we call 'install' again, it will prompt again. Not good.
 
@@ -370,7 +370,7 @@ func InstallCmd(s service.Service) *cobra.Command {
 			}
 
 			fmt.Println("\nInstallation Complete!")
-			fmt.Printf("Logs:   %s\n", filepath.Join(targetDir, "fsd.log"))
+			fmt.Printf("Logs:   %s\n", filepath.Join(targetDir, "hunt.log"))
 			fmt.Printf("Config: %s\n", targetConfigPath)
 			fmt.Printf("Data:   %s  <-- PUT FILES HERE\n", cfg.WatchPath)
 		},
@@ -383,7 +383,7 @@ func ServiceInstallCmd(s service.Service) *cobra.Command {
 		Use:    "service-install",
 		Hidden: true,
 		Run: func(cmd *cobra.Command, args []string) {
-			// This command runs INSIDE the target binary (e.g. /opt/fsd/fsd)
+			// This command runs INSIDE the target binary (e.g. /opt/hunt/hunt)
 			// So s.Install() uses the correct path.
 			if err := s.Install(); err != nil {
 				if strings.Contains(err.Error(), "already exists") {

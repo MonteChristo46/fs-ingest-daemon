@@ -17,7 +17,7 @@
 The daemon operates with four main concurrent components:
 
 1.  **Watcher:** Recursively watches a target directory for new files. When a file is detected, it is recorded in the local SQLite database.
-2.  **Store (SQLite):** A local persistent state store (`fsd.db`) that tracks every file's lifecycle (`PENDING` -> `UPLOADED`) and metadata.
+2.  **Store (SQLite):** A local persistent state store (`hunt.db`) that tracks every file's lifecycle (`PENDING` -> `UPLOADED`) and metadata.
 3.  **Sidecar Logic:**
     *   **Strict Mode:** Waits for a companion `.json` file (e.g., `img.png` + `img.png.json`) to arrive.
     *   **None Mode:** Uploads files immediately as they are detected.
@@ -43,13 +43,13 @@ These commands automatically download the latest binary, install it, and start t
 #### Linux / macOS
 
 **Option A: System Service (Recommended)**
-*Requires sudo. Installs to `/opt/fsd` and runs on boot.*
+*Requires sudo. Installs to `/opt/hunt` and runs on boot.*
 ```bash
 curl -sfL https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/install.sh | sudo sh
 ```
 
 **Option B: User Service**
-*No sudo required. Installs to `~/fsd` and runs on login.*
+*No sudo required. Installs to `~/hunt` and runs on login.*
 ```bash
 curl -sfL https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/install.sh | sh
 ```
@@ -57,13 +57,13 @@ curl -sfL https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main
 #### Windows
 
 **Option A: System Service (Recommended)**
-*Run in PowerShell as Administrator. Installs to `C:\ProgramData\fsd`.*
+*Run in PowerShell as Administrator. Installs to `C:\ProgramData\hunt`.*
 ```powershell
 iwr -useb https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/install.ps1 | iex
 ```
 
 **Option B: User Service**
-*Run in standard PowerShell. Installs to `%LOCALAPPDATA%\fsd`.*
+*Run in standard PowerShell. Installs to `%LOCALAPPDATA%\hunt`.*
 ```powershell
 iwr -useb https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/install.ps1 | iex
 ```
@@ -77,13 +77,13 @@ If you prefer to download the binary manually:
 
     **Linux / macOS**
     ```bash
-    chmod +x fsd
-    sudo ./fsd install
+    chmod +x hunt
+    sudo ./hunt install
     ```
 
     **Windows (PowerShell Admin)**
     ```powershell
-    .\fsd.exe install
+    .\hunt.exe install
     ```
 
 ### Interactive Setup
@@ -112,26 +112,26 @@ curl -sfL https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main
 iwr -useb https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/uninstall.ps1 | iex
 ```
 
-Alternatively, if you still have the binary: `sudo fsd uninstall` (Linux) or `fsd uninstall` (Windows).
+Alternatively, if you still have the binary: `sudo hunt uninstall` (Linux) or `hunt uninstall` (Windows).
 
 ### Management
 Once installed, use the CLI to manage the service:
 
 ```bash
 # Check status
-fsd status
+hunt status
 
 # View live logs
-fsd logs
+hunt logs
 
 # Stop/Start service
-sudo fsd stop
-sudo fsd start
+sudo hunt stop
+sudo hunt start
 ```
 
 ## Configuration
 
-The configuration file is generated at install time (e.g., `/opt/fsd/config.json`). You can edit this file manually to tune advanced settings.
+The configuration file is generated at install time (e.g., `/opt/hunt/config.json`). You can edit this file manually to tune advanced settings.
 
 **Configuration Parameters:**
 
@@ -168,20 +168,20 @@ The configuration file is generated at install time (e.g., `/opt/fsd/config.json
 To modify the configuration after installation:
 
 1.  **Locate the config file:**
-    *   **Linux/macOS (System):** `/opt/fsd/config.json`
-    *   **Linux/macOS (User):** `~/fsd/config.json`
-    *   **Windows (System):** `C:\ProgramData\fsd\config.json`
-    *   **Windows (User):** `%USERPROFILE%\fsd\config.json`
+    *   **Linux/macOS (System):** `/opt/hunt/config.json`
+    *   **Linux/macOS (User):** `~/hunt/config.json`
+    *   **Windows (System):** `C:\ProgramData\hunt\config.json`
+    *   **Windows (User):** `%USERPROFILE%\hunt\config.json`
 
 2.  **Edit the file:** Open `config.json` in any text editor (requires Admin/Root for system installs).
 
 3.  **Restart the service:** Changes only take effect after a restart.
     ```bash
     # Linux / macOS
-    sudo fsd restart
+    sudo hunt restart
 
     # Windows (Powershell Admin)
-    fsd restart
+    hunt restart
     ```
 
 ## Building from Source
@@ -190,15 +190,15 @@ If you are a developer contributing to the project:
 
 ```bash
 # Build the binary
-go build -o fsd cmd/fsd/main.go
+go build -o hunt cmd/hunt/main.go
 
 # Run locally (Foreground)
-./fsd run
+./hunt run
 ```
 
 ## Project Structure
 
-*   `cmd/fsd`: Main entry point and CLI implementation.
+*   `cmd/hunt`: Main entry point and CLI implementation.
 *   `internal/api`: HTTP client and data models for the Ingestion API.
 *   `internal/config`: Configuration loading and management.
 *   `internal/ingest`: Core ingestion logic (Handshake -> Upload -> Confirm).

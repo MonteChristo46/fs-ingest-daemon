@@ -15,7 +15,7 @@ import (
 // NewRootCmd creates the root command and all subcommands for the CLI.
 func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath string) *cobra.Command {
 	var rootCmd = &cobra.Command{
-		Use:   "fsd",
+		Use:   "hunt",
 		Short: "FS Ingest Daemon CLI",
 	}
 
