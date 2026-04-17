@@ -1,8 +1,16 @@
 #!/bin/sh
 set -e
 
+VERSION="0.1.0-alpha"
+
+# Print colored banner (Gradient from Purple #9c27b0 to Teal #009688)
+printf "\033[38;2;156;39;176m   __                __ \033[0m\n"
+printf "\033[38;2;117;66;166m  / /_  __  ______  / /_\033[0m\n"
+printf "\033[38;2;78;93;156m / __ \/ / / / __ \/ __/\033[0m\n"
+printf "\033[38;2;39;120;146m/ / / / /_/ / / / / /_  \033[0m\n"
+printf "\033[38;2;0;150;136m/_/ /_/\__,_/_/ /_/\__/ \033[0m \033[38;2;200;200;200mDAEMON INSTALLER | v%s\033[0m\n\n" "$VERSION"
+
 # Configuration
-# URL to the raw binary on GitHub
 DOWNLOAD_URL="https://github.com/MonteChristo46/fs-ingest-daemon/raw/main/hunt"
 INSTALL_DIR="/opt/hunt"
 BIN_NAME="hunt"
@@ -17,11 +25,11 @@ if [ "$ARCH" = "x86_64" ]; then
 elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
     ARCH="arm64"
 else
-    echo "Unsupported architecture: $ARCH"
+    echo "[SYSTEM] ❌ Unsupported architecture: $ARCH"
     exit 1
 fi
 
-echo "Checking system requirements... [OK]"
+echo "[SYSTEM] Checking system requirements... [OK] ($OS / $ARCH)"
 
 # Detect Privilege Level
 IS_ROOT=0
@@ -31,9 +39,11 @@ fi
 
 # Define Paths based on Privilege
 if [ "$IS_ROOT" -eq 1 ]; then
+    echo "[SYSTEM] Running as ROOT (System Install)"
     INSTALL_DIR="/opt/hunt"
     SYMLINK_DIR="/usr/local/bin"
 else
+    echo "[SYSTEM] Running as USER (User Install)"
     INSTALL_DIR="$HOME/hunt"
     # Try standard user bin locations
     if [ -d "$HOME/.local/bin" ]; then
@@ -49,17 +59,17 @@ fi
 SYMLINK_PATH="${SYMLINK_DIR}/${BIN_NAME}"
 
 # Prepare Directory
-echo "Creating install directory: $INSTALL_DIR"
+echo "[CONFIG] Target Directory: $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
 
 # Download Binary
 TARGET="${INSTALL_DIR}/${BIN_NAME}"
 
-echo "Downloading ${DOWNLOAD_URL}..."
+echo "[STATUS] Downloading Hunt daemon..."
 curl -fsSL "$DOWNLOAD_URL" -o "$TARGET"
 
 if [ ! -f "$TARGET" ]; then
-    echo "❌ Error: Download failed. File not found at $TARGET"
+    echo "[STATUS] ❌ Error: Download failed. File not found at $TARGET"
     exit 1
 fi
 
@@ -67,32 +77,32 @@ chmod +x "$TARGET"
 
 # macOS (Darwin) Fix: Apply ad-hoc signature to prevent "Killed: 9"
 if [ "$(uname -s)" = "Darwin" ]; then
-    echo "🍎 Applying macOS security fix (ad-hoc signing)..."
+    echo "[STATUS] Applying macOS security fix (ad-hoc signing)... [OK]"
     # Remove quarantine attribute if present
     xattr -d com.apple.quarantine "$TARGET" 2>/dev/null || true
     # Force ad-hoc signing
-    codesign --force --deep -s - "$TARGET"
+    codesign --force --deep -s - "$TARGET" >/dev/null 2>&1
 fi
 
 # Symlink to PATH
 if [ -n "$SYMLINK_DIR" ]; then
-    echo "Symlinking to $SYMLINK_PATH..."
     # Check write permissions for symlink dir
     if [ -w "$SYMLINK_DIR" ]; then
         rm -f "$SYMLINK_PATH"
         ln -s "$TARGET" "$SYMLINK_PATH"
     else
-        echo "⚠️  Warning: Cannot write to $SYMLINK_DIR. Skipping symlink."
-        echo "   Please add $INSTALL_DIR to your PATH manually."
+        echo "[CONFIG] ⚠️  Warning: Cannot write to $SYMLINK_DIR. Skipping symlink."
+        echo "         Please add $INSTALL_DIR to your PATH manually."
     fi
 else
-    echo "ℹ️  No standard bin directory found ($HOME/.local/bin or $HOME/bin)."
-    echo "   Please add $INSTALL_DIR to your PATH to run 'hunt' from anywhere."
-    echo "   Example: export PATH=\"\$PATH:$INSTALL_DIR\""
+    echo "[CONFIG] ℹ️  No standard bin directory found ($HOME/.local/bin or $HOME/bin)."
+    echo "         Please add $INSTALL_DIR to your PATH to run 'hunt' from anywhere."
+    echo "         Example: export PATH=\"\$PATH:$INSTALL_DIR\""
 fi
 
 # Run Installer
-echo "Running hunt install..."
+echo "[STATUS] Running hunt install..."
+echo "--------------------------------------------------"
 # We redirect stdin from /dev/tty to ensure interactive prompts work
 # even when the script is piped via curl
 if [ -t 0 ]; then
@@ -102,24 +112,10 @@ else
     if [ -c /dev/tty ]; then
         "$TARGET" install < /dev/tty
     else
-        echo "⚠️  Warning: No TTY detected. Running in non-interactive mode."
+        echo "> ⚠️  Warning: No TTY detected. Running in non-interactive mode."
         "$TARGET" install
     fi
 fi
 
-echo ""
-echo "✅ Installation wrapper complete."
-echo "You can now use 'hunt' from anywhere."
-on wrapper complete."
-echo "You can now use 'hunt' from anywhere."
-y ]; then
-        "$TARGET" install < /dev/tty
-    else
-        echo "⚠️  Warning: No TTY detected. Running in non-interactive mode."
-        "$TARGET" install
-    fi
-fi
-
-echo ""
-echo "✅ Installation wrapper complete."
-echo "You can now use 'hunt' from anywhere."
+echo "--------------------------------------------------"
+echo "> ✅ Installation wrapper complete. You can now use 'hunt'."

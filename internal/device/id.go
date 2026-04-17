@@ -3,6 +3,7 @@ package device
 import (
 	"errors"
 	"net"
+	"strings"
 )
 
 // GetMACAddress returns the MAC address of the first valid network interface (non-loopback).
@@ -23,7 +24,8 @@ func GetMACAddress() (string, error) {
 			continue
 		}
 
-		return iface.HardwareAddr.String(), nil
+		mac := iface.HardwareAddr.String()
+		return strings.ReplaceAll(mac, ":", "-"), nil
 	}
 
 	return "", errors.New("no valid network interface found")

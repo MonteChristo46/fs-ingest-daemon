@@ -181,8 +181,10 @@ func InstallCmd(s service.Service) *cobra.Command {
 					deviceID = "dev-001"
 				}
 
-				userInputID := prompt("Device ID", deviceID)
-				userInputEndpoint := prompt("API Endpoint", config.DefaultEndpoint)
+				userInputID := deviceID
+				fmt.Printf("Device ID [%s]\n", deviceID)
+				userInputEndpoint := config.DefaultEndpoint
+				fmt.Printf("API Endpoint [%s]\n", config.DefaultEndpoint)
 
 				fmt.Println("\n--- Sidecar Strategy ---")
 				fmt.Println("Choose how files are paired:")
