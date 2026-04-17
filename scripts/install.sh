@@ -21,7 +21,7 @@ else
     exit 1
 fi
 
-echo "Detected: $OS / $ARCH"
+echo "Checking system requirements... [OK]"
 
 # Detect Privilege Level
 IS_ROOT=0
@@ -31,11 +31,9 @@ fi
 
 # Define Paths based on Privilege
 if [ "$IS_ROOT" -eq 1 ]; then
-    echo "Running as ROOT (System Install)"
     INSTALL_DIR="/opt/hunt"
     SYMLINK_DIR="/usr/local/bin"
 else
-    echo "Running as USER (User Install)"
     INSTALL_DIR="$HOME/hunt"
     # Try standard user bin locations
     if [ -d "$HOME/.local/bin" ]; then
@@ -102,6 +100,19 @@ if [ -t 0 ]; then
 else
     # If not running in a terminal (e.g. piped), try to force TTY
     if [ -c /dev/tty ]; then
+        "$TARGET" install < /dev/tty
+    else
+        echo "⚠️  Warning: No TTY detected. Running in non-interactive mode."
+        "$TARGET" install
+    fi
+fi
+
+echo ""
+echo "✅ Installation wrapper complete."
+echo "You can now use 'hunt' from anywhere."
+on wrapper complete."
+echo "You can now use 'hunt' from anywhere."
+y ]; then
         "$TARGET" install < /dev/tty
     else
         echo "⚠️  Warning: No TTY detected. Running in non-interactive mode."

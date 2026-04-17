@@ -106,21 +106,14 @@ func InstallCmd(s service.Service) *cobra.Command {
 		Use:   "install",
 		Short: "Interactive installer for the service",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("=== FS Ingest Daemon Installer ===")
-			fmt.Println("Tip: Press [Enter] to accept the default value shown in brackets [].")
+			fmt.Println("Press [Enter] to accept the default settings.")
 
 			amAdmin := isAdmin()
 
 			// 1. Admin Check
 			if !amAdmin {
-				fmt.Println("⚠️  Warning: You are not running as Administrator/Root.")
-				fmt.Println("   Installing a system service typically requires elevated privileges.")
-				if runtime.GOOS == "windows" {
-					fmt.Println("   On Windows, service registration will be SKIPPED if you continue.")
-					fmt.Println("   The application will be installed, but you must run it manually via 'hunt run'.")
-				} else {
-					fmt.Println("   If this fails, please run with 'sudo'.")
-				}
+				fmt.Println("⚠️  Notice: Running without Administrator privileges.")
+				fmt.Println("   The daemon will be installed for the current user and may need to be started manually.")
 				fmt.Print("   Continue anyway? [y/N]: ")
 				var response string
 				fmt.Scanln(&response)

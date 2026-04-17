@@ -18,15 +18,11 @@ $IsAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::A
 
 if ($IsAdmin) {
 
-    Write-Host "Running as ADMINISTRATOR (System Install)"
-
     $InstallDir = "C:\ProgramData\hunt"
 
     $PathScope = "Machine"
 
 } else {
-
-    Write-Host "Running as USER (User Install)"
 
     $InstallDir = Join-Path $env:LOCALAPPDATA "hunt"
 
@@ -145,6 +141,22 @@ if ($CurrentPath -notlike "*$InstallDir*") {
     $env:Path += ";$InstallDir" # Update current session
 
 } else {
+
+    Write-Host "PATH already configured."
+
+}
+
+
+
+# 5. Run Install
+Write-Host "Running hunt install..."
+& $Target install
+
+Write-Host "`n✅ Installation wrapper complete."
+Write-Host "You may need to restart your terminal for PATH changes to take effect."
+Installation wrapper complete."
+Write-Host "You may need to restart your terminal for PATH changes to take effect."
+{
 
     Write-Host "PATH already configured."
 
