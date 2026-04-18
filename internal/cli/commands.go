@@ -34,8 +34,9 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 	// installCmd moved to install.go
 
 	var uninstallCmd = &cobra.Command{
-		Use:   "uninstall",
-		Short: "Uninstall the service",
+		Use:    "uninstall",
+		Short:  "Uninstall the service",
+		Hidden: true,
 		PreRun: RequireAdmin,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Clear AuthToken on uninstall to force re-pairing

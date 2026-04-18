@@ -112,8 +112,6 @@ curl -sfL https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main
 iwr -useb https://raw.githubusercontent.com/MonteChristo46/fs-ingest-daemon/main/scripts/uninstall.ps1 | iex
 ```
 
-Alternatively, if you still have the binary: `sudo hunt uninstall` (Linux) or `hunt uninstall` (Windows).
-
 ### Management
 Once installed, use the CLI to manage the service:
 
