@@ -252,6 +252,7 @@ func InstallCmd(s service.Service) *cobra.Command {
 
 				// Create the Watch Directory now
 				os.MkdirAll(cfg.WatchPath, 0755)
+				util.EnsureUserOwnership(cfg.WatchPath)
 
 				// Save Config
 				if err := config.Save(targetConfigPath, cfg); err != nil {
