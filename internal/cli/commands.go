@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"fs-ingest-daemon/assets"
 	"fs-ingest-daemon/internal/config"
 	"fs-ingest-daemon/internal/util"
 
@@ -24,8 +25,10 @@ func RequireAdmin(cmd *cobra.Command, args []string) {
 // NewRootCmd creates the root command and all subcommands for the CLI.
 func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath string) *cobra.Command {
 	var rootCmd = &cobra.Command{
-		Use:   "hunt",
-		Short: "FS Ingest Daemon CLI",
+		Use:     "hunt",
+		Short:   "FS Ingest Daemon CLI",
+		Long:    assets.Banner() + "\nFS Ingest Daemon CLI",
+		Version: assets.Version(),
 	}
 
 	// installCmd moved to install.go

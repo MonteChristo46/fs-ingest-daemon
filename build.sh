@@ -9,6 +9,26 @@ mkdir -p "$OUT_DIR"
 
 echo "Building FS Ingest Daemon for multiple platforms..."
 
+# Read Version and Banner
+VERSION=$(cat assets/VERSION)
+# Read banner, escape backslashes for sed, and escape newlines
+BANNER=$(cat assets/banner.txt | sed 's/\\/\\\\/g' | sed 's/$/\\n/' | tr -d '\n')
+# PowerShell banner needs \033 replaced with $ESC, then escape backslashes for sed
+PS_BANNER=$(cat assets/banner.txt | sed 's/\\033/$ESC/g' | sed 's/\\/\\\\/g' | sed 's/$/`n/' | tr -d '\n')
+
+echo "Generating install scripts..."
+
+# Generate install.sh
+sed -e "s/{{VERSION}}/$VERSION/g" \
+    -e "s|{{BANNER}}|$BANNER|g" \
+    scripts/install.sh.tpl > "scripts/install.sh"
+chmod +x "scripts/install.sh"
+
+# Generate install.ps1
+sed -e "s/{{VERSION}}/$VERSION/g" \
+    -e "s|{{BANNER}}|$PS_BANNER|g" \
+    scripts/install.ps1.tpl > "scripts/install.ps1"
+
 # Define targets: "OS/ARCH"
 TARGETS=(
     "darwin/amd64"

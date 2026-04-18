@@ -189,12 +189,17 @@ To modify the configuration after installation:
 If you are a developer contributing to the project:
 
 ```bash
-# Build the binary
+# Generate the install scripts and build the binary for all platforms
+./build.sh
+
+# Or build the binary directly
 go build -o hunt cmd/hunt/main.go
 
 # Run locally (Foreground)
 ./hunt run
 ```
+
+> **Note on Install Scripts:** The `scripts/install.sh` and `scripts/install.ps1` files are auto-generated from their `.tpl` counterparts during the build process to inject the version and CLI banner. If you need to modify the installers, edit the `.tpl` files and run `./build.sh`.
 
 ## Project Structure
 

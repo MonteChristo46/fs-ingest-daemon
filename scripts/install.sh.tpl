@@ -1,15 +1,10 @@
 #!/bin/sh
 set -e
 
-VERSION="0.4.1-alpha"
+VERSION="{{VERSION}}"
 
 # Print colored banner
-printf "\033[38;2;156;39;176m   __                __ \033[0m
-\033[38;2;117;66;166m  / /_  __  ______  / /_\033[0m
-\033[38;2;78;93;156m / __ \/ / / / __ \/ __/\033[0m
-\033[38;2;39;120;146m/ / / / /_/ / / / / /_  \033[0m
-\033[38;2;0;150;136m/_/ /_/\__,_/_/ /_/\__/ \033[0m
-"
+printf "{{BANNER}}"
 printf " \033[38;2;200;200;200mDAEMON INSTALLER | v%s\033[0m\n\n" "$VERSION"
 
 # Configuration

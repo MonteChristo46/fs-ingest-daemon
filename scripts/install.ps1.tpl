@@ -1,11 +1,11 @@
 # Requires RunAsAdministrator
 $ErrorActionPreference = "Stop"
 
-$VERSION="0.4.1-alpha"
+$VERSION="{{VERSION}}"
 
 $ESC = [char]27
 
-Write-Host "$ESC[38;2;156;39;176m   __                __ $ESC[0m`n$ESC[38;2;117;66;166m  / /_  __  ______  / /_$ESC[0m`n$ESC[38;2;78;93;156m / __ \/ / / / __ \/ __/$ESC[0m`n$ESC[38;2;39;120;146m/ / / / /_/ / / / / /_  $ESC[0m`n$ESC[38;2;0;150;136m/_/ /_/\__,_/_/ /_/\__/ $ESC[0m`n" -NoNewline
+Write-Host "{{BANNER}}" -NoNewline
 Write-Host " $ESC[38;2;200;200;200mDAEMON INSTALLER | v$VERSION$ESC[0m`n"
 
 # Configuration
