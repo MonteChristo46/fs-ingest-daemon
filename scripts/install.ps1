@@ -12,7 +12,7 @@ Write-Host "$ESC[38;2;39;120;146m/ / / / /_/ / / / / /_  $ESC[0m"
 Write-Host "$ESC[38;2;0;150;136m/_/ /_/\__,_/_/ /_/\__/ $ESC[0m $ESC[38;2;200;200;200mDAEMON INSTALLER | v$VERSION$ESC[0m`n"
 
 # Configuration
-$Url = "https://github.com/MonteChristo46/fs-ingest-daemon/raw/main/hunt.exe"
+$Url = "https://github.com/MonteChristo46/fs-ingest-daemon/raw/main/build/hunt-windows-amd64.exe"
 $BinName = "hunt.exe"
 $InstallDir = "C:\ProgramData\hunt"
 $PathScope = "Machine"
