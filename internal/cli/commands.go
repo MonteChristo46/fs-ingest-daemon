@@ -67,7 +67,11 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 		Run: func(cmd *cobra.Command, args []string) {
 			err := s.Start()
 			if err != nil {
-				fmt.Printf("Failed to start: %s\n", err)
+				if strings.Contains(err.Error(), "Load failed: 5: Input/output error") || strings.Contains(err.Error(), "already running") {
+					fmt.Println("Service is already running.")
+				} else {
+					fmt.Printf("Failed to start: %s\n", err)
+				}
 				return
 			}
 			fmt.Println("Service started.")
@@ -121,6 +125,7 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 	var statusCmd = &cobra.Command{
 		Use:   "status",
 		Short: "Show service status",
+		PreRun: RequireAdmin,
 		Run: func(cmd *cobra.Command, args []string) {
 			status, err := s.Status()
 			if err != nil {
@@ -141,6 +146,7 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 	var logsCmd = &cobra.Command{
 		Use:   "logs",
 		Short: "Show service logs",
+		PreRun: RequireAdmin,
 		Run: func(cmd *cobra.Command, args []string) {
 			f, err := os.Open(logPath)
 			if err != nil {
