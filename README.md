@@ -90,8 +90,9 @@ If you prefer to download the binary manually:
 The installer will verify your environment and guide you through:
 1.  **Location:** Confirms the install directory based on your permissions (System vs. User path).
 2.  **Config:** Prompts for your `Device ID` and `API Endpoint`.
-3.  **Pairing:** If the device is new, a QR code will appear. Scan it with the web app to claim the device.
-4.  **Service:** The daemon registers itself with the OS and starts automatically.
+3.  **Loading Dock:** Asks where the daemon should look for files to upload. It will suggest a safe user-space directory (e.g., `~/glitch-hunt/input`) and ensure the regular user has proper read/write access to this "Drop Zone".
+4.  **Pairing:** If the device is new, a QR code will appear. Scan it with the web app to claim the device.
+5.  **Service:** The daemon registers itself with the OS and starts automatically.
 
 ### Uninstallation
 
@@ -139,7 +140,7 @@ The configuration file is generated at install time (e.g., `/opt/hunt/config.jso
 | `endpoint` | Base URL of the Ingestion API. | `(User Input)` |
 | `sidecar_strategy` | Pairing strategy. `strict` waits for .json sidecar; `none` uploads standalone files. | `"none"` |
 | `allowed_extensions` | List of allowed file extensions (case-insensitive). | `[".jpg", ".jpeg", ".png", ".json"]` |
-| `watch_path` | Local directory path to watch for new files. | `[InstallDir]/data` |
+| `watch_path` | Local directory path to watch for new files (The Loading Dock). | `~/glitch-hunt/input` |
 | `max_data_size_gb` | Maximum allowed size for local storage (GB) before pruning kicks in. | `1.0` |
 | `ingest_check_interval` | Polling frequency for checking new PENDING files. | `"20ms"` |
 | `ingest_batch_size` | Number of files to process in a single ingest cycle. | `10` |
