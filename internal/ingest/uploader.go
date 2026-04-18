@@ -54,7 +54,7 @@ func (u *Uploader) Process(f store.FileRecord) (bool, time.Duration) {
 	// The partner (the image) will handle the upload and mark this one as done.
 	if filepath.Ext(f.Path) == ".json" {
 		if f.PartnerPath.Valid && f.PartnerPath.String != "" {
-			u.logger.Info("Skipping metadata file, waiting for partner", "path", f.Path, "partner", f.PartnerPath.String)
+			u.logger.Debug("Skipping metadata file, waiting for partner", "path", f.Path, "partner", f.PartnerPath.String)
 			return false, 0
 		}
 		// If it's an orphan json (no partner detected or partner lost), we process it.
