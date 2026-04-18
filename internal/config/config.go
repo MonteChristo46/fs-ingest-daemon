@@ -75,11 +75,13 @@ var (
 // If the file does not exist, it returns a default configuration structure.
 func Load(path string) (*Config, error) {
 	// Initialize with sensible defaults
+	defaultWatchPath := filepath.Join(util.GetRealUserHome(), "glitch-hunt", "input")
+
 	cfg := &Config{
 		DeviceID:                  "dev-001",
 		Endpoint:                  DefaultEndpoint,
 		MaxDataSizeGB:             DefaultMaxDataSizeGB,
-		WatchPath:                 "./data",
+		WatchPath:                 defaultWatchPath,
 		LogPath:                   "./hunt.log",
 		DBPath:                    "./hunt.db",
 		IngestCheckInterval:       DefaultIngestCheckInterval,
@@ -138,12 +140,7 @@ func Load(path string) (*Config, error) {
 	}
 
 	// Normalize Paths if they are defaults or relative
-	if cfg.WatchPath == "./data" {
-		cfg.WatchPath = resolvePath("data")
-	} else {
-		cfg.WatchPath = resolvePath(cfg.WatchPath)
-	}
-
+	cfg.WatchPath = resolvePath(cfg.WatchPath)
 	cfg.LogPath = resolvePath(cfg.LogPath)
 	cfg.DBPath = resolvePath(cfg.DBPath)
 

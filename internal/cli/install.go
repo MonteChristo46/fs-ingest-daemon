@@ -206,6 +206,11 @@ func InstallCmd(s service.Service) *cobra.Command {
 				userInputEndpoint := config.DefaultEndpoint
 				fmt.Printf("API Endpoint: %s\n", userInputEndpoint)
 
+				fmt.Println("\n[CONFIG] Loading Dock (Drop Zone)")
+				fmt.Println("Where should the daemon look for files to upload?")
+				defaultWatchPath := filepath.Join(util.GetRealUserHome(), "glitch-hunt", "input")
+				userInputWatchPath := prompt("Watch Directory", defaultWatchPath)
+
 				fmt.Println("\n[CONFIG] Sidecar Strategy")
 				fmt.Println("Choose how files are paired:")
 				fmt.Println("  strict: Waits for a companion .json file (e.g. img.png + img.png.json). Safer for metadata.")
@@ -221,7 +226,7 @@ func InstallCmd(s service.Service) *cobra.Command {
 					DeviceID:                userInputID,
 					Endpoint:                userInputEndpoint,
 					MaxDataSizeGB:           config.DefaultMaxDataSizeGB,
-					WatchPath:               filepath.Join(targetDir, "data"),
+					WatchPath:               userInputWatchPath,
 					LogPath:                 filepath.Join(targetDir, "hunt.log"),
 					DBPath:                  filepath.Join(targetDir, "hunt.db"),
 					IngestCheckInterval:     config.DefaultIngestCheckInterval,

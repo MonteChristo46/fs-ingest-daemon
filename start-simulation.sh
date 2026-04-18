@@ -2,8 +2,8 @@
 
 # Configuration
 SOURCE_DIR="./test-data/mvtec_anomaly_detection"
-TARGET_DIR="$HOME/hunt/data"
-DB_PATH="$HOME/hunt/hunt.db"
+TARGET_DIR="$HOME/glitch-hunt/input"
+DB_PATH="$HOME/glitch-hunt/hunt.db"
 LOG_FILE="./simulation.log"
 
 DEFECT_RATE="1.0"
@@ -93,7 +93,7 @@ echo "Simulators running with PIDs: ${SIM_PIDS[*]} (logs -> $LOG_FILE)"
 
 # Tail the logs so we can see what's happening
 # We tail both the simulation log and the daemon log (if it exists)
-DAEMON_LOG="$HOME/hunt/hunt.log"
+DAEMON_LOG="$HOME/glitch-hunt/hunt.log"
 tail -f "$LOG_FILE" "$DAEMON_LOG" 2>/dev/null &
 TAIL_PID=$!
 
