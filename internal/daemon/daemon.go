@@ -231,7 +231,7 @@ func (d *Daemon) processFile(path string) {
 		}
 	} else {
 		if d.Logger != nil {
-			d.Logger.Info("Detected", "path", path)
+			d.Logger.Debug("Detected", "path", path)
 		}
 	}
 }

@@ -15,15 +15,18 @@ import (
 
 // Ingester manages the file ingestion pipeline.
 type Ingester struct {
-	cfg       *config.Config // App configuration
-	store     *store.Store   // Local metadata database
-	uploader  *Uploader      // Worker that handles actual upload logic
-	logger    *slog.Logger   // Structured logger
-	stop      chan struct{}  // Channel to signal shutdown
-	jobs      chan store.FileRecord
-	pending   map[string]struct{}
-	pendingMu sync.Mutex
-	wg        sync.WaitGroup
+	cfg            *config.Config // App configuration
+	store          *store.Store   // Local metadata database
+	uploader       *Uploader      // Worker that handles actual upload logic
+	logger         *slog.Logger   // Structured logger
+	stop           chan struct{}  // Channel to signal shutdown
+	jobs           chan store.FileRecord
+	pending        map[string]struct{}
+	pendingMu      sync.Mutex
+	wg             sync.WaitGroup
+	statsMu        sync.Mutex
+	ingestedCount  int
+	totalLatency   time.Duration
 }
 
 // NewIngester creates a new Ingester instance.
@@ -78,6 +81,32 @@ func (i *Ingester) Start() {
 			}
 		}
 	}()
+
+	i.wg.Add(1)
+	go func() {
+		defer i.wg.Done()
+		// Heartbeat loop
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				i.statsMu.Lock()
+				count := i.ingestedCount
+				totalLatency := i.totalLatency
+				i.ingestedCount = 0
+				i.totalLatency = 0
+				i.statsMu.Unlock()
+
+				if count > 0 {
+					avgLatencyMs := totalLatency.Milliseconds() / int64(count)
+					i.logger.Info("Ingest Heartbeat", "files_ingested", count, "avg_latency_ms", avgLatencyMs)
+				}
+			case <-i.stop:
+				return
+			}
+		}
+	}()
 }
 
 // Stop signals the polling loop to exit.
@@ -119,7 +148,14 @@ func (i *Ingester) processBatch() {
 
 func (i *Ingester) worker() {
 	for f := range i.jobs {
-		i.uploader.Process(f)
+		success, latency := i.uploader.Process(f)
+
+		if success {
+			i.statsMu.Lock()
+			i.ingestedCount++
+			i.totalLatency += latency
+			i.statsMu.Unlock()
+		}
 
 		i.pendingMu.Lock()
 		delete(i.pending, f.Path)

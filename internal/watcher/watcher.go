@@ -134,7 +134,7 @@ func (w *Watcher) AddRecursive(path string) error {
 			return err
 		}
 		if info.IsDir() {
-			w.logger.Info("Watching directory", "path", newPath)
+			w.logger.Debug("Watching directory", "path", newPath)
 			return w.fsWatcher.Add(newPath)
 		}
 

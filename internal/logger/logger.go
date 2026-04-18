@@ -39,9 +39,9 @@ type ServiceHandler struct {
 	groups []string
 }
 
-// Enabled always returns true as the service logger's filtering is managed by the OS or the service wrapper.
+// Enabled filters out Debug logs because the service logger does not support them natively.
 func (h *ServiceHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return true
+	return level >= slog.LevelInfo
 }
 
 // Handle formats the record and writes it to the service logger.
