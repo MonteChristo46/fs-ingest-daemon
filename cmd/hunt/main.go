@@ -5,9 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/user"
 	"path/filepath"
-	"runtime"
 
 	"fs-ingest-daemon/internal/cli"
 	"fs-ingest-daemon/internal/config"
@@ -16,18 +14,6 @@ import (
 
 	"github.com/kardianos/service"
 )
-
-func isRoot() bool {
-	if runtime.GOOS == "windows" {
-		_, err := os.Open("\\\\.\\PHYSICALDRIVE0")
-		return err == nil
-	}
-	u, err := user.Current()
-	if err != nil {
-		return false
-	}
-	return u.Uid == "0"
-}
 
 func main() {
 	// 1. Load Config early to get LogPath
@@ -53,13 +39,6 @@ func main() {
 		DisplayName: "FS Ingest Daemon",
 		Description: "Watches directories and uploads files to the cloud.",
 		Arguments:   []string{"run"},
-	}
-
-	// If not root, force User Service mode
-	if !isRoot() {
-		svcConfig.Option = service.KeyValue{
-			"UserService": true,
-		}
 	}
 
 	// Create the daemon instance (implements service.Interface)
