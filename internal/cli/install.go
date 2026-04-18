@@ -112,7 +112,7 @@ func InstallCmd(s service.Service) *cobra.Command {
 
 			// 1. Admin Check
 			if !amAdmin {
-				fmt.Println("⚠️  Notice: Running without Administrator privileges.")
+				fmt.Println("[WARN] Notice: Running without Administrator privileges.")
 				fmt.Println("   The daemon will be installed for the current user and may need to be started manually.")
 				fmt.Print("   Continue anyway? [y/N]: ")
 				var response string
@@ -129,14 +129,14 @@ func InstallCmd(s service.Service) *cobra.Command {
 
 			// Create Directory
 			if err := os.MkdirAll(targetDir, 0755); err != nil {
-				fmt.Printf("❌ Error creating directory %s: %v\n", targetDir, err)
+				fmt.Printf("[ERROR] Error creating directory %s: %v\n", targetDir, err)
 				return
 			}
 
 			// 3. Self-Copy Binary
 			currentExe, err := os.Executable()
 			if err != nil {
-				fmt.Printf("❌ Error finding current executable: %v\n", err)
+				fmt.Printf("[ERROR] Error finding current executable: %v\n", err)
 				return
 			}
 
@@ -149,31 +149,72 @@ func InstallCmd(s service.Service) *cobra.Command {
 			realTarget, _ := filepath.EvalSymlinks(targetExe)
 
 			if realCurrent != realTarget {
-				fmt.Printf("-> Copying binary to %s...\n", targetExe)
+				fmt.Printf("[STATUS] Copying binary to %s...\n", targetExe)
 				// Remove existing if needed (for updates)
 				os.Remove(targetExe)
 				if err := copyFile(currentExe, targetExe); err != nil {
-					fmt.Printf("❌ Error copying binary: %v\n", err)
+					fmt.Printf("[ERROR] Error copying binary: %v\n", err)
 					return
 				}
 			} else {
-				fmt.Println("-> Binary is already in target location. Skipping copy.")
+				fmt.Println("[STATUS] Running from target location. Skipping self-copy.")
 			}
 
 			// 4. Generate Config
 			targetConfigPath := filepath.Join(targetDir, "config.json")
 			var cfg *config.Config
 
+			var generateNewConfig bool
 			if _, err := os.Stat(targetConfigPath); err == nil {
-				fmt.Printf("-> Found existing config at %s. Skipping configuration.\n", targetConfigPath)
+				fmt.Printf("[CONFIG] Found existing config at %s.\n", targetConfigPath)
 				// Load existing config to check for AuthToken later
 				var err error
 				cfg, err = config.Load(targetConfigPath)
 				if err != nil {
-					fmt.Printf("⚠️  Warning: Could not load existing config: %v\n", err)
+					fmt.Printf("[WARN] Warning: Could not load existing config: %v\n", err)
+					fmt.Print("   Existing config is invalid. Overwrite with new configuration? [y/N]: ")
+					var response string
+					fmt.Scanln(&response)
+					if strings.ToLower(response) == "y" {
+						generateNewConfig = true
+					}
+				} else {
+					fmt.Print("   Do you want to update your configuration? [y/N]: ")
+					var response string
+					fmt.Scanln(&response)
+					if strings.ToLower(response) == "y" {
+						fmt.Printf("Device ID: %s\n", cfg.DeviceID)
+						fmt.Printf("API Endpoint: %s\n", cfg.Endpoint)
+
+						fmt.Println("\n[CONFIG] Sidecar Strategy")
+						fmt.Println("Choose how files are paired:")
+						fmt.Println("  strict: Waits for a companion .json file (e.g. img.png + img.png.json). Safer for metadata.")
+						fmt.Println("  none:   Uploads files immediately. Good for simple image streams.")
+
+						strategyDefault := cfg.SidecarStrategy
+						if strategyDefault == "" {
+							strategyDefault = config.DefaultSidecarStrategy
+						}
+						userInputStrategy := prompt("Sidecar Strategy (strict/none)", strategyDefault)
+						if userInputStrategy != "strict" && userInputStrategy != "none" {
+							fmt.Printf("Invalid choice '%s', defaulting to '%s'\n", userInputStrategy, strategyDefault)
+							userInputStrategy = strategyDefault
+						}
+						cfg.SidecarStrategy = userInputStrategy
+
+						if err := config.Save(targetConfigPath, cfg); err != nil {
+							fmt.Printf("[ERROR] Error saving config: %v\n", err)
+							return
+						}
+						fmt.Println("[CONFIG] Configuration updated successfully.")
+					}
 				}
 			} else {
-				fmt.Println("-> Generating new configuration...")
+				generateNewConfig = true
+			}
+
+			if generateNewConfig {
+				fmt.Println("[CONFIG] Generating new configuration...")
 
 				// Generate defaults
 				deviceID, _ := device.GetMACAddress()
@@ -182,11 +223,11 @@ func InstallCmd(s service.Service) *cobra.Command {
 				}
 
 				userInputID := deviceID
-				fmt.Printf("Device ID [%s]\n", deviceID)
+				fmt.Printf("Device ID: %s\n", deviceID)
 				userInputEndpoint := config.DefaultEndpoint
-				fmt.Printf("API Endpoint [%s]\n", config.DefaultEndpoint)
+				fmt.Printf("API Endpoint: %s\n", userInputEndpoint)
 
-				fmt.Println("\n--- Sidecar Strategy ---")
+				fmt.Println("\n[CONFIG] Sidecar Strategy")
 				fmt.Println("Choose how files are paired:")
 				fmt.Println("  strict: Waits for a companion .json file (e.g. img.png + img.png.json). Safer for metadata.")
 				fmt.Println("  none:   Uploads files immediately. Good for simple image streams.")
@@ -230,21 +271,21 @@ func InstallCmd(s service.Service) *cobra.Command {
 
 				// Save Config
 				if err := config.Save(targetConfigPath, cfg); err != nil {
-					fmt.Printf("❌ Error saving config: %v\n", err)
+					fmt.Printf("[ERROR] Error saving config: %v\n", err)
 					return
 				}
-				fmt.Println("-> Configuration saved.")
+				fmt.Println("[CONFIG] Configuration saved.")
 			}
 
 			// 4.5 Interactive Pairing (The "User Friendly" Magic)
 			if cfg != nil && cfg.AuthToken == "" {
-				fmt.Println("\n-> Device not paired. Initiating pairing sequence...")
+				fmt.Println("\n[STATUS] Device not paired. Initiating pairing sequence...")
 
 				apiClient := api.NewClient(cfg.Endpoint, cfg.APITimeout)
 				pairingResp, err := apiClient.RequestPairingCode(cfg.DeviceID)
 
 				if err != nil {
-					fmt.Printf("⚠️  Pairing request failed: %v\n", err)
+					fmt.Printf("[WARN] Pairing request failed: %v\n", err)
 					fmt.Println("   Continuing installation without pairing. You can pair later or edit config.json manually.")
 				} else {
 					claimURL := fmt.Sprintf("%s/claim/%s", strings.TrimSuffix(cfg.WebClientURL, "/"), pairingResp.Code)
@@ -274,7 +315,7 @@ func InstallCmd(s service.Service) *cobra.Command {
 							}
 
 							if statusResp.Status == api.PairingStatusClaimed {
-								fmt.Println("\n✅ Device successfully claimed!")
+								fmt.Println("\n[SUCCESS] Device successfully claimed!")
 								if statusResp.APIKey != nil {
 									cfg.AuthToken = *statusResp.APIKey
 								} else {
@@ -283,12 +324,12 @@ func InstallCmd(s service.Service) *cobra.Command {
 
 								// Save updated config
 								if err := config.Save(targetConfigPath, cfg); err != nil {
-									fmt.Printf("❌ Error saving paired config: %v\n", err)
+									fmt.Printf("[ERROR] Error saving paired config: %v\n", err)
 								}
 								paired = true
 								break pollLoop
 							} else if statusResp.Status == api.PairingStatusExpired {
-								fmt.Println("\n❌ Pairing code expired.")
+								fmt.Println("\n[ERROR] Pairing code expired.")
 								break pollLoop
 							}
 						}
@@ -303,7 +344,7 @@ func InstallCmd(s service.Service) *cobra.Command {
 			// 5. Register Service (POINTING TO THE NEW BINARY)
 			// On Windows, if we are not admin, we SKIP this step.
 			if runtime.GOOS == "windows" && !amAdmin {
-				fmt.Println("\n-> Skipping Service Registration (Not Admin).")
+				fmt.Println("\n[WARN] Skipping Service Registration (Not Admin).")
 				fmt.Println("   Installation is complete, but the background service was NOT registered.")
 				fmt.Println("   To run the daemon, open a terminal and run:")
 				fmt.Printf("   %s run\n", targetExe)
@@ -316,7 +357,7 @@ func InstallCmd(s service.Service) *cobra.Command {
 			// Since we want to register the *target* binary, we might need to run the install command *from* the target binary.
 
 			if realCurrent != realTarget {
-				fmt.Println("-> Registering service via installed binary...")
+				fmt.Println("[STATUS] Registering service via installed binary...")
 				// Execute: /opt/hunt/hunt service-install
 				// We need a hidden command or just call 'install' again but from the new location?
 				// If we call 'install' again, it will prompt again. Not good.
@@ -328,29 +369,29 @@ func InstallCmd(s service.Service) *cobra.Command {
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
 				if err := cmd.Run(); err != nil {
-					fmt.Printf("❌ Failed to register service: %v\n", err)
+					fmt.Printf("[ERROR] Failed to register service: %v\n", err)
 					return
 				}
 			} else {
 				// We are already in the right place, just install
-				fmt.Println("-> Registering service...")
+				fmt.Println("[STATUS] Registering service...")
 				if err := s.Install(); err != nil {
 					if strings.Contains(err.Error(), "already exists") {
 						fmt.Println("   Service definition already exists. Reinstalling...")
 						_ = s.Uninstall() // Ignore uninstall error, just try to clear it
 						if err := s.Install(); err != nil {
-							fmt.Printf("❌ Service reinstall failed: %v\n", err)
+							fmt.Printf("[ERROR] Service reinstall failed: %v\n", err)
 						} else {
-							fmt.Println("✅ Service re-registered.")
+							fmt.Println("[SUCCESS] Service re-registered.")
 						}
 					} else {
-						fmt.Printf("❌ Service install failed: %v\n", err)
+						fmt.Printf("[ERROR] Service install failed: %v\n", err)
 					}
 				}
 			}
 
 			// 6. Start Service
-			fmt.Println("-> Starting service...")
+			fmt.Println("[STATUS] Starting service...")
 			// We can try to start it via the current service object (if local) or shell
 			// Best to use the service object if we are local, or shell if remote.
 			// Ideally, `service-install` above handles install. We need `service-start`.
@@ -359,9 +400,9 @@ func InstallCmd(s service.Service) *cobra.Command {
 			// Note: If we just registered a remote binary, 's' might still be pointing to local?
 			// kardianos/service controls the service by NAME. So as long as the name matches, s.Start() works.
 			if err := s.Start(); err != nil {
-				fmt.Printf("⚠️  Service start failed (it might be running): %v\n", err)
+				fmt.Printf("[WARN] Service start failed (it might be running): %v\n", err)
 			} else {
-				fmt.Println("✅ Service started successfully!")
+				fmt.Println("[SUCCESS] Service started successfully!")
 			}
 
 			fmt.Println("\nInstallation Complete!")
@@ -395,10 +436,10 @@ func ServiceInstallCmd(s service.Service) *cobra.Command {
 					fmt.Println("Service reinstalled successfully.")
 					return
 				}
-				fmt.Printf("Internal Install Error: %v\n", err)
+				fmt.Printf("[ERROR] Internal Install Error: %v\n", err)
 				os.Exit(1)
 			}
-			fmt.Println("Internal Service Registration Successful.")
+			fmt.Println("[SUCCESS] Internal Service Registration Successful.")
 		},
 	}
 }

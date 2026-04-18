@@ -31,32 +31,12 @@ fi
 
 echo "[SYSTEM] Checking system requirements... [OK] ($OS / $ARCH)"
 
-# Detect Privilege Level
-IS_ROOT=0
-if [ "$(id -u)" -eq 0 ]; then
-    IS_ROOT=1
+# Require Root Privilege
+if [ "$(id -u)" -ne 0 ]; then
+    echo "[SYSTEM] ❌ Error: This script must be run as root. Please use sudo."
+    exit 1
 fi
-
-# Define Paths based on Privilege
-if [ "$IS_ROOT" -eq 1 ]; then
-    echo "[SYSTEM] Running as ROOT (System Install)"
-    INSTALL_DIR="/opt/hunt"
-    SYMLINK_DIR="/usr/local/bin"
-else
-    echo "[SYSTEM] Running as USER (User Install)"
-    INSTALL_DIR="$HOME/hunt"
-    # Try standard user bin locations
-    if [ -d "$HOME/.local/bin" ]; then
-        SYMLINK_DIR="$HOME/.local/bin"
-    elif [ -d "$HOME/bin" ]; then
-        SYMLINK_DIR="$HOME/bin"
-    else
-        # No standard user bin found, we might need to rely on the install dir being in PATH
-        SYMLINK_DIR=""
-    fi
-fi
-
-SYMLINK_PATH="${SYMLINK_DIR}/${BIN_NAME}"
+echo "[SYSTEM] Running as ROOT"
 
 # Prepare Directory
 echo "[CONFIG] Target Directory: $INSTALL_DIR"
@@ -69,7 +49,7 @@ echo "[STATUS] Downloading Hunt daemon..."
 curl -fsSL "$DOWNLOAD_URL" -o "$TARGET"
 
 if [ ! -f "$TARGET" ]; then
-    echo "[STATUS] ❌ Error: Download failed. File not found at $TARGET"
+    echo "[ERROR] Download failed. File not found at $TARGET"
     exit 1
 fi
 
@@ -85,20 +65,10 @@ if [ "$(uname -s)" = "Darwin" ]; then
 fi
 
 # Symlink to PATH
-if [ -n "$SYMLINK_DIR" ]; then
-    # Check write permissions for symlink dir
-    if [ -w "$SYMLINK_DIR" ]; then
-        rm -f "$SYMLINK_PATH"
-        ln -s "$TARGET" "$SYMLINK_PATH"
-    else
-        echo "[CONFIG] ⚠️  Warning: Cannot write to $SYMLINK_DIR. Skipping symlink."
-        echo "         Please add $INSTALL_DIR to your PATH manually."
-    fi
-else
-    echo "[CONFIG] ℹ️  No standard bin directory found ($HOME/.local/bin or $HOME/bin)."
-    echo "         Please add $INSTALL_DIR to your PATH to run 'hunt' from anywhere."
-    echo "         Example: export PATH=\"\$PATH:$INSTALL_DIR\""
-fi
+echo "[CONFIG] Creating symlink at $SYMLINK_PATH..."
+mkdir -p /usr/local/bin
+rm -f "$SYMLINK_PATH"
+ln -s "$TARGET" "$SYMLINK_PATH"
 
 # Run Installer
 echo "[STATUS] Running hunt install..."
@@ -118,4 +88,4 @@ else
 fi
 
 echo "--------------------------------------------------"
-echo "> ✅ Installation wrapper complete. You can now use 'hunt'."
+echo "[SUCCESS] Installation wrapper complete. You can now use 'hunt'."

@@ -28,7 +28,7 @@ echo "Stopping and uninstalling service..."
 if [ -x "$INSTALL_DIR/hunt" ]; then
     "$INSTALL_DIR/hunt" uninstall || echo "Warning: Service uninstall returned error (might not be running)"
 elif command -v hunt >/dev/null 2>&1; then
-    hunt uninstall || echo "Warning: Service uninstall returned error"
+    hunt uninstall || echo "[WARN] Service uninstall returned error"
 fi
 
 if [ -n "$SYMLINK_PATH" ] && [ -L "$SYMLINK_PATH" ]; then
@@ -39,4 +39,6 @@ fi
 echo "Removing installation directory: $INSTALL_DIR"
 rm -rf "$INSTALL_DIR"
 
-echo "✅ Cleanup complete."
+echo "[SUCCESS] Cleanup complete."
+plete."
+."

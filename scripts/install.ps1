@@ -14,20 +14,19 @@ Write-Host "$ESC[38;2;0;150;136m/_/ /_/\__,_/_/ /_/\__/ $ESC[0m $ESC[38;2;200;20
 # Configuration
 $Url = "https://github.com/MonteChristo46/fs-ingest-daemon/raw/main/hunt.exe"
 $BinName = "hunt.exe"
+$InstallDir = "C:\ProgramData\hunt"
+$PathScope = "Machine"
 
 # 1. Check Privileges
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 $IsAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
-if ($IsAdmin) {
-    Write-Host "[SYSTEM] Running as ADMINISTRATOR (System Install)"
-    $InstallDir = "C:\ProgramData\hunt"
-    $PathScope = "Machine"
-} else {
-    Write-Host "[SYSTEM] Running as USER (User Install)"
-    $InstallDir = Join-Path $env:LOCALAPPDATA "hunt"
-    $PathScope = "User"
+if (-not $IsAdmin) {
+    Write-Host "[ERROR] This script must be run as an Administrator."
+    exit 1
 }
+
+Write-Host "[SYSTEM] Running as ADMINISTRATOR"
 
 # 2. Create Directory
 Write-Host "[CONFIG] Target Directory: $InstallDir"
@@ -69,5 +68,5 @@ Write-Host "--------------------------------------------------"
 & $Target install
 
 Write-Host "--------------------------------------------------"
-Write-Host "> ✅ Installation wrapper complete. You can now use 'hunt'."
-Write-Host "> ℹ️  You may need to restart your terminal for PATH changes to take effect."
+Write-Host "[SUCCESS] Installation wrapper complete. You can now use 'hunt'."
+Write-Host "[INFO] You may need to restart your terminal for PATH changes to take effect."

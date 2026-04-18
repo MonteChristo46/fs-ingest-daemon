@@ -46,4 +46,4 @@ if (Test-Path $InstallDir) {
     Remove-Item -Path $InstallDir -Recurse -Force
 }
 
-Write-Host "✅ Cleanup complete."
+Write-Host "[SUCCESS] Cleanup complete."
