@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"fs-ingest-daemon/internal/util"
 )
 
 // Config represents the application configuration structure.
@@ -130,10 +132,7 @@ func Load(path string) (*Config, error) {
 			return p
 		}
 		if !filepath.IsAbs(p) && (strings.HasPrefix(p, "./") || !strings.HasPrefix(p, "/")) { // simplistic check
-			ex, err := os.Executable()
-			if err == nil {
-				return filepath.Join(filepath.Dir(ex), p)
-			}
+			return filepath.Join(util.GetExecutableDir(), p)
 		}
 		return p
 	}

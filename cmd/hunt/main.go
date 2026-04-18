@@ -11,17 +11,15 @@ import (
 	"fs-ingest-daemon/internal/config"
 	"fs-ingest-daemon/internal/daemon"
 	fsdlog "fs-ingest-daemon/internal/logger"
+	"fs-ingest-daemon/internal/util"
 
 	"github.com/kardianos/service"
 )
 
 func main() {
 	// 1. Load Config early to get LogPath
-	ex, err := os.Executable()
-	if err != nil {
-		log.Fatal(err)
-	}
-	cfgPath := filepath.Join(filepath.Dir(ex), "config.json")
+	exDir := util.GetExecutableDir()
+	cfgPath := filepath.Join(exDir, "config.json")
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		// If config fails to load, we'll try to proceed with defaults or log to stderr later
@@ -71,7 +69,7 @@ func main() {
 	// Use LogPath from config
 	logPath := cfg.LogPath
 	if logPath == "" {
-		logPath = filepath.Join(filepath.Dir(ex), "hunt.log")
+		logPath = filepath.Join(exDir, "hunt.log")
 	}
 
 	// Initialize LogRotator

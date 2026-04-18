@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"fs-ingest-daemon/internal/api"
 	"fs-ingest-daemon/internal/config"
 	"fs-ingest-daemon/internal/device"
+	"fs-ingest-daemon/internal/util"
 
 	"github.com/kardianos/service"
 	"github.com/mdp/qrterminal/v3"
@@ -24,7 +24,7 @@ import (
 // Default paths based on OS and privileges
 func getDefaultInstallDir() string {
 	if runtime.GOOS == "windows" {
-		if isAdmin() {
+		if util.IsAdmin() {
 			return `C:\ProgramData\hunt`
 		}
 		// Use LocalAppData for non-admin users
@@ -42,24 +42,11 @@ func getDefaultInstallDir() string {
 	}
 
 	// Linux / macOS
-	if isAdmin() {
+	if util.IsAdmin() {
 		return "/opt/hunt"
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, "hunt")
-}
-
-// Check if running as Admin/Root
-func isAdmin() bool {
-	if runtime.GOOS == "windows" {
-		_, err := os.Open("\\\\.\\PHYSICALDRIVE0")
-		return err == nil
-	}
-	currentUser, err := user.Current()
-	if err != nil {
-		return false
-	}
-	return currentUser.Uid == "0"
 }
 
 // Helper to prompt user
@@ -105,23 +92,11 @@ func InstallCmd(s service.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "install",
 		Short: "Interactive installer for the service",
+		PreRun: RequireAdmin,
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Println("Press [Enter] to accept the default settings.")
 
-			amAdmin := isAdmin()
-
-			// 1. Admin Check
-			if !amAdmin {
-				fmt.Println("[WARN] Notice: Running without Administrator privileges.")
-				fmt.Println("   The daemon will be installed for the current user and may need to be started manually.")
-				fmt.Print("   Continue anyway? [y/N]: ")
-				var response string
-				fmt.Scanln(&response)
-				if strings.ToLower(response) != "y" {
-					fmt.Println("Aborted.")
-					return
-				}
-			}
+			amAdmin := util.IsAdmin()
 
 			// 2. Determine Install Location
 			defaultDir := getDefaultInstallDir()
@@ -155,6 +130,10 @@ func InstallCmd(s service.Service) *cobra.Command {
 				if err := copyFile(currentExe, targetExe); err != nil {
 					fmt.Printf("[ERROR] Error copying binary: %v\n", err)
 					return
+				}
+				if runtime.GOOS == "darwin" {
+					fmt.Println("[STATUS] Applying macOS security fix (ad-hoc signing) to copied binary...")
+					exec.Command("codesign", "--force", "--deep", "-s", "-", targetExe).Run()
 				}
 			} else {
 				fmt.Println("[STATUS] Running from target location. Skipping self-copy.")

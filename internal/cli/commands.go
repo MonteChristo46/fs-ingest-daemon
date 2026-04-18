@@ -8,10 +8,18 @@ import (
 	"strings"
 
 	"fs-ingest-daemon/internal/config"
+	"fs-ingest-daemon/internal/util"
 
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 )
+
+func RequireAdmin(cmd *cobra.Command, args []string) {
+	if !util.IsAdmin() {
+		fmt.Printf("Error: This command requires administrator privileges. Please run with 'sudo hunt %s'.\n", cmd.Use)
+		os.Exit(1)
+	}
+}
 
 // NewRootCmd creates the root command and all subcommands for the CLI.
 func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath string) *cobra.Command {
@@ -25,6 +33,7 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 	var uninstallCmd = &cobra.Command{
 		Use:   "uninstall",
 		Short: "Uninstall the service",
+		PreRun: RequireAdmin,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Clear AuthToken on uninstall to force re-pairing
 			cfg, err := config.Load(cfgPath)
@@ -54,6 +63,7 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 	var startCmd = &cobra.Command{
 		Use:   "start",
 		Short: "Start the service",
+		PreRun: RequireAdmin,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := s.Start()
 			if err != nil {
@@ -67,6 +77,7 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 	var stopCmd = &cobra.Command{
 		Use:   "stop",
 		Short: "Stop the service",
+		PreRun: RequireAdmin,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := s.Stop()
 			if err != nil {
@@ -80,6 +91,7 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 	var restartCmd = &cobra.Command{
 		Use:   "restart",
 		Short: "Restart the service",
+		PreRun: RequireAdmin,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := s.Restart()
 			if err != nil {
@@ -91,8 +103,9 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 	}
 
 	var runCmd = &cobra.Command{
-		Use:   "run",
-		Short: "Run the service in foreground",
+		Use:    "run",
+		Short:  "Run the service in foreground",
+		Hidden: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := s.Run()
 			if err != nil {
