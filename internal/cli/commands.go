@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 
 	"fs-ingest-daemon/internal/config"
 
@@ -38,10 +39,15 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 
 			err = s.Uninstall()
 			if err != nil {
-				fmt.Printf("Failed to uninstall service: %s\n", err)
-				return
+				if strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "is not installed") {
+					fmt.Printf("[WARN] Service is not currently installed or already removed: %v\n", err)
+				} else {
+					fmt.Printf("[ERROR] Failed to uninstall service: %v\n", err)
+					return
+				}
+			} else {
+				fmt.Println("Service uninstalled.")
 			}
-			fmt.Println("Service uninstalled.")
 		},
 	}
 
