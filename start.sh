@@ -1,1 +1,1 @@
-go build -o hunt ./cmd/hunt && ./hunt run
+ ./cmd/hunt && ./hunt run
