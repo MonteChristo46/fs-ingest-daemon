@@ -1,0 +1,8 @@
+{
+    "batch_id": "B-9921",
+    "line_id": "LINE_04",
+    "operator_id": "user_77",
+    "hardware": {
+        "sensor_type": "optical-v1"
+    }
+}

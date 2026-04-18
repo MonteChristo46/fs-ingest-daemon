@@ -7,7 +7,7 @@ set -e
 OUT_DIR="build"
 mkdir -p "$OUT_DIR"
 
-echo "Building FS Ingest Daemon for multiple platforms..."
+echo "Building Glitch Hunt Daemon for multiple platforms..."
 
 # Read Version and Banner
 VERSION=$(cat assets/VERSION)

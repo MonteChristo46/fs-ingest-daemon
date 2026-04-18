@@ -3,18 +3,21 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"fs-ingest-daemon/assets"
+	"fs-ingest-daemon/internal/config"
 	"fs-ingest-daemon/internal/simulation"
 
 	"github.com/spf13/cobra"
 )
 
-func SimulateCmd(logger *slog.Logger) *cobra.Command {
+func SimulateCmd(logger *slog.Logger, appCfg *config.Config) *cobra.Command {
 	var (
 		sourceDir  string
 		targetDir  string
@@ -29,13 +32,28 @@ func SimulateCmd(logger *slog.Logger) *cobra.Command {
 		Use:   "simulate",
 		Short: "Run ingestion simulation",
 		Long: `Simulate ingestion by generating files in the target directory.
-Two modes are supported:
-1. Synthetic (default): Generates dummy files with random content.
-2. Replay: Copies real images from --source directory.`,
+Modes:
+1. Replay (default): Uses embedded simulation images and contexts.
+2. Replay Custom: Copies real images from --source directory.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			logger := logger.With("service", "simulator")
+
+			var sourceFS fs.FS
+			var err error
+			if sourceDir != "" {
+				sourceFS = os.DirFS(sourceDir)
+			} else {
+				// Use embedded simulation data
+				sourceFS, err = fs.Sub(assets.SimulationData, "simulation-data")
+				if err != nil {
+					fmt.Printf("Error accessing embedded simulation data: %v\n", err)
+					return
+				}
+			}
+
 			cfg := simulation.Config{
 				SourceDir:  sourceDir,
+				SourceFS:   sourceFS,
 				TargetDir:  targetDir,
 				Rate:       rate,
 				DefectRate: defectRate,
@@ -69,8 +87,8 @@ Two modes are supported:
 		},
 	}
 
-	cmd.Flags().StringVar(&sourceDir, "source", "", "Path to source images (optional, enables Replay mode)")
-	cmd.Flags().StringVar(&targetDir, "target", "./data", "Target directory to drop files")
+	cmd.Flags().StringVar(&sourceDir, "source", "", "Path to source images (optional, overrides default embedded images)")
+	cmd.Flags().StringVar(&targetDir, "target", appCfg.WatchPath, "Target directory to drop files")
 	cmd.Flags().DurationVar(&rate, "rate", 1*time.Second, "Interval between file generation (e.g., 500ms, 1s)")
 	cmd.Flags().Float64Var(&defectRate, "defect-rate", 0.1, "Probability of generating a defect image (0.0 to 1.0)")
 	cmd.Flags().Float64Var(&jitter, "jitter", 0.2, "Variance in generation rate (e.g., 0.2 for +/- 20%)")

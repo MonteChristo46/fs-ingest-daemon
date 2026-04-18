@@ -24,7 +24,7 @@ func RequireAdmin(cmd *cobra.Command, args []string) {
 }
 
 // NewRootCmd creates the root command and all subcommands for the CLI.
-func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath string) *cobra.Command {
+func NewRootCmd(s service.Service, logger *slog.Logger, cfgPath string, cfg *config.Config) *cobra.Command {
 	var rootCmd = &cobra.Command{
 		Use:     "hunt",
 		Short:   "FS Ingest Daemon CLI",
@@ -66,8 +66,8 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 	}
 
 	var startCmd = &cobra.Command{
-		Use:   "start",
-		Short: "Start the service",
+		Use:    "start",
+		Short:  "Start the service",
 		PreRun: RequireAdmin,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := s.Start()
@@ -84,8 +84,8 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 	}
 
 	var stopCmd = &cobra.Command{
-		Use:   "stop",
-		Short: "Stop the service",
+		Use:    "stop",
+		Short:  "Stop the service",
 		PreRun: RequireAdmin,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := s.Stop()
@@ -98,8 +98,8 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 	}
 
 	var restartCmd = &cobra.Command{
-		Use:   "restart",
-		Short: "Restart the service",
+		Use:    "restart",
+		Short:  "Restart the service",
 		PreRun: RequireAdmin,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := s.Restart()
@@ -128,8 +128,8 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 	}
 
 	var statusCmd = &cobra.Command{
-		Use:   "status",
-		Short: "Show service status",
+		Use:    "status",
+		Short:  "Show service status",
 		PreRun: RequireAdmin,
 		Run: func(cmd *cobra.Command, args []string) {
 			status, err := s.Status()
@@ -154,8 +154,8 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 	}
 
 	var watchCmd = &cobra.Command{
-		Use:   "watch [path]",
-		Short: "Set the Loading Dock folder and restart the daemon",
+		Use:    "watch [path]",
+		Short:  "Set the Loading Dock folder and restart the daemon",
 		PreRun: RequireAdmin,
 		Run: func(cmd *cobra.Command, args []string) {
 			targetDir := "."
@@ -212,11 +212,11 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 	}
 
 	var logsCmd = &cobra.Command{
-		Use:   "logs",
-		Short: "Show service logs",
+		Use:    "logs",
+		Short:  "Show service logs",
 		PreRun: RequireAdmin,
 		Run: func(cmd *cobra.Command, args []string) {
-			f, err := os.Open(logPath)
+			f, err := os.Open(cfg.LogPath)
 			if err != nil {
 				if os.IsNotExist(err) {
 					fmt.Println("No logs found.")
@@ -244,7 +244,7 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 		statusCmd,
 		watchCmd,
 		logsCmd,
-		SimulateCmd(logger),
+		SimulateCmd(logger, cfg),
 	)
 	return rootCmd
 }

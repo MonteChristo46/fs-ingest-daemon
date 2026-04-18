@@ -1,0 +1,21 @@
+{
+  "batch_id": "A-9921",
+  "line_id": "LINE_01",
+  "production": {
+    "product_id": "AX-700",
+    "recipe": {
+      "id": "TREAT_01",
+      "revision": 4,
+      "temp_target": 180
+    }
+  },
+  "environment": {
+    "humidity": 45.2,
+    "ambient_temp": 22.5
+  },
+
+  "device_stats": {
+    "firmware": "v3.2.1",
+    "uptime_seconds": 86400
+  }
+}

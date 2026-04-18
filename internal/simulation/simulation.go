@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -26,7 +27,8 @@ var (
 )
 
 type Config struct {
-	SourceDir  string        // If empty, use synthetic mode
+	SourceDir  string        // Used mostly for logging if it's external, empty if embedded
+	SourceFS   fs.FS         // The filesystem to use for source files
 	TargetDir  string        // Where to drop files
 	Rate       time.Duration // Interval between files
 	DefectRate float64       // Probability of generating a defect image (0.0 to 1.0)
@@ -55,10 +57,8 @@ func New(cfg Config) (*Simulator, error) {
 		s.categories = cfg.Categories
 	}
 
-	if cfg.SourceDir != "" {
-		if err := s.scanSourceDir(); err != nil {
-			return nil, fmt.Errorf("failed to scan source dir: %w", err)
-		}
+	if err := s.scanSourceDir(); err != nil {
+		return nil, fmt.Errorf("failed to scan source dir: %w", err)
 	}
 
 	// Ensure target directory exists
@@ -70,23 +70,22 @@ func New(cfg Config) (*Simulator, error) {
 }
 
 func (s *Simulator) scanSourceDir() error {
-	s.cfg.Logger.Info("Scanning source directory", "path", s.cfg.SourceDir)
+	s.cfg.Logger.Info("Scanning source directory")
 
-	// Reset categories if we find real ones
 	foundCategories := make(map[string]bool)
 	allowedCategories := make(map[string]bool)
 	for _, c := range s.cfg.Categories {
 		allowedCategories[c] = true
 	}
 
-	err := filepath.Walk(s.cfg.SourceDir, func(path string, info os.FileInfo, err error) error {
+	err := fs.WalkDir(s.cfg.SourceFS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() && info.Name() == "ground_truth" {
-			return filepath.SkipDir
+		if d.IsDir() && d.Name() == "ground_truth" {
+			return fs.SkipDir
 		}
-		if info.IsDir() {
+		if d.IsDir() {
 			return nil
 		}
 
@@ -97,21 +96,33 @@ func (s *Simulator) scanSourceDir() error {
 		}
 
 		// Try to determine category from path
-		// Expected structure: source/category/.../image.png
-		relPath, err := filepath.Rel(s.cfg.SourceDir, path)
-		if err != nil {
-			return nil
-		}
-
-		parts := strings.Split(relPath, string(os.PathSeparator))
+		parts := strings.Split(path, "/")
 		if len(parts) > 1 {
 			category := parts[0]
+
+			// For simple structures like "good/0.png" or "bad/0.png", default category to something sensible
+			if category == "good" || category == "bad" {
+				category = "default_cam"
+			}
+
 			if len(allowedCategories) == 0 || allowedCategories[category] {
-				if strings.Contains(strings.ToLower(path), string(os.PathSeparator)+"good"+string(os.PathSeparator)) {
+				isDefect := true
+				if strings.Contains(strings.ToLower(path), "/good/") || strings.HasPrefix(strings.ToLower(path), "good/") {
+					isDefect = false
+				}
+
+				if !isDefect {
 					s.goodFiles[category] = append(s.goodFiles[category], path)
 				} else {
 					s.defectFiles[category] = append(s.defectFiles[category], path)
 				}
+				foundCategories[category] = true
+			}
+		} else {
+			// Files in root directory
+			category := "default_cam"
+			if len(allowedCategories) == 0 || allowedCategories[category] {
+				s.goodFiles[category] = append(s.goodFiles[category], path)
 				foundCategories[category] = true
 			}
 		}
@@ -130,7 +141,6 @@ func (s *Simulator) scanSourceDir() error {
 		}
 		s.cfg.Logger.Info("Found categories in source", "count", len(s.categories), "categories", s.categories)
 	} else if len(s.cfg.Categories) > 0 {
-		// Used requested categories even if not found in source, or if source was empty
 		s.cfg.Logger.Warn("No source files found for requested categories. Simulation might be limited.", "categories", s.cfg.Categories)
 	} else {
 		s.cfg.Logger.Warn("No categories found in source directory, falling back to default categories with synthetic data")
@@ -188,13 +198,11 @@ func (s *Simulator) modeName() string {
 }
 
 func (s *Simulator) generateFile() error {
-	// 1. Pick random category
 	category := s.categories[rand.Intn(len(s.categories))]
 
-	// 2. Determine source content
 	var sourcePath string
 	var content []byte
-	var ext string = ".png" // Default for synthetic
+	var ext string = ".png"
 
 	isDefect := rand.Float64() < s.cfg.DefectRate
 	var files []string
@@ -218,12 +226,6 @@ func (s *Simulator) generateFile() error {
 		ext = filepath.Ext(sourcePath)
 	}
 
-	// 3. Construct target path with randomized structure
-	// If nested is false, depth is 0
-	// Else randomly pick a structure depth:
-	// 0: <category>
-	// 1: <factory>/<category>
-	// 2: <factory>/<line>/<category>
 	var depth int
 	if s.cfg.Nested {
 		depth = rand.Intn(3)
@@ -253,10 +255,8 @@ func (s *Simulator) generateFile() error {
 		return fmt.Errorf("failed to create directory %s: %w", targetDir, err)
 	}
 
-	// 4. Write file
 	if sourcePath != "" {
-		// Replay mode: Copy file
-		src, err := os.Open(sourcePath)
+		src, err := s.cfg.SourceFS.Open(sourcePath)
 		if err != nil {
 			return fmt.Errorf("failed to open source file: %w", err)
 		}
@@ -273,14 +273,6 @@ func (s *Simulator) generateFile() error {
 		}
 		s.cfg.Logger.Debug("Copied file", "source", sourcePath, "target", targetPath)
 	} else {
-		// Synthetic mode: Generate dummy content
-		// Create a small dummy image (just random bytes or a specific pattern)
-		// For now, let's just write a string "DUMMY IMAGE CONTENT"
-		// Ideally this would be a valid PNG header, but for basic ingestion testing strings might suffice
-		// unless the ingestor validates image headers strictly.
-		// Let's create a minimal 1x1 PNG to be safe if validation exists.
-		// Or just random bytes if validation is loose.
-		// Given the requirements, let's generate random noise for now.
 		content = make([]byte, 1024)
 		rand.Read(content)
 
@@ -290,36 +282,51 @@ func (s *Simulator) generateFile() error {
 		s.cfg.Logger.Info("Generated", "target", targetPath)
 	}
 
-	// 5. Generate JSON sidecar to satisfy "strict" strategy
-	// We only do this for images (to avoid sidecars for sidecars)
 	if !strings.HasSuffix(targetPath, ".json") {
 		jsonPath := targetPath + ".json"
-		// Build JSON context dynamically
-		contextMap := map[string]interface{}{
-			"simulation": true,
-			"category":   category,
-			"is_defect":  isDefect,
-			"timestamp":  time.Now().Format(time.RFC3339),
-		}
-		if factory != "" {
-			contextMap["factory"] = factory
-		}
-		if line != "" {
-			contextMap["line"] = line
-		}
 
-		// Encode to JSON string manually to keep it simple, or use a quick format
-		// since the map is small and simple. Let's build the string manually for simplicity.
-		var jsonParts []string
-		for k, v := range contextMap {
-			switch val := v.(type) {
-			case string:
-				jsonParts = append(jsonParts, fmt.Sprintf(`"%s": %q`, k, val))
-			case bool:
-				jsonParts = append(jsonParts, fmt.Sprintf(`"%s": %t`, k, val))
+		var contextFiles []string
+		fs.WalkDir(s.cfg.SourceFS, ".", func(path string, d fs.DirEntry, err error) error {
+			if err == nil && !d.IsDir() && (strings.HasSuffix(strings.ToLower(path), "context.json") || strings.HasSuffix(strings.ToLower(path), "context_1.json") || strings.HasSuffix(strings.ToLower(path), "context_2.json")) {
+				contextFiles = append(contextFiles, path)
+			}
+			return nil
+		})
+
+		var jsonContent []byte
+		if len(contextFiles) > 0 {
+			ctxPath := contextFiles[rand.Intn(len(contextFiles))]
+			if ctxFile, err := s.cfg.SourceFS.Open(ctxPath); err == nil {
+				jsonContent, _ = io.ReadAll(ctxFile)
+				ctxFile.Close()
 			}
 		}
-		jsonContent := []byte(fmt.Sprintf("{%s}", strings.Join(jsonParts, ", ")))
+
+		if len(jsonContent) == 0 {
+			contextMap := map[string]interface{}{
+				"simulation": true,
+				"category":   category,
+				"is_defect":  isDefect,
+				"timestamp":  time.Now().Format(time.RFC3339),
+			}
+			if factory != "" {
+				contextMap["factory"] = factory
+			}
+			if line != "" {
+				contextMap["line"] = line
+			}
+
+			var jsonParts []string
+			for k, v := range contextMap {
+				switch val := v.(type) {
+				case string:
+					jsonParts = append(jsonParts, fmt.Sprintf(`"%s": %q`, k, val))
+				case bool:
+					jsonParts = append(jsonParts, fmt.Sprintf(`"%s": %t`, k, val))
+				}
+			}
+			jsonContent = []byte(fmt.Sprintf("{%s}", strings.Join(jsonParts, ", ")))
+		}
 
 		if err := os.WriteFile(jsonPath, jsonContent, 0644); err != nil {
 			return fmt.Errorf("failed to write sidecar file: %w", err)

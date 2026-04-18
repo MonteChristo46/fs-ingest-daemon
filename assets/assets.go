@@ -1,7 +1,7 @@
 package assets
 
 import (
-	_ "embed"
+	"embed"
 	"strings"
 )
 
@@ -10,6 +10,9 @@ var rawVersion string
 
 //go:embed banner.txt
 var rawBanner string
+
+//go:embed simulation-data/* simulation-data/**/*
+var SimulationData embed.FS
 
 // Version returns the parsed version string
 func Version() string {

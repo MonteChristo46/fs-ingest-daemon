@@ -90,8 +90,8 @@ func copyFile(src, dst string) error {
 
 func InstallCmd(s service.Service) *cobra.Command {
 	return &cobra.Command{
-		Use:   "install",
-		Short: "Interactive installer for the service",
+		Use:    "install",
+		Short:  "Interactive installer for the service",
 		PreRun: RequireAdmin,
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Println("Press [Enter] to accept the default settings.")
