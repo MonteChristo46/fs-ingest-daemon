@@ -15,18 +15,18 @@ import (
 
 // Ingester manages the file ingestion pipeline.
 type Ingester struct {
-	cfg            *config.Config // App configuration
-	store          *store.Store   // Local metadata database
-	uploader       *Uploader      // Worker that handles actual upload logic
-	logger         *slog.Logger   // Structured logger
-	stop           chan struct{}  // Channel to signal shutdown
-	jobs           chan store.FileRecord
-	pending        map[string]struct{}
-	pendingMu      sync.Mutex
-	wg             sync.WaitGroup
-	statsMu        sync.Mutex
-	ingestedCount  int
-	totalLatency   time.Duration
+	cfg           *config.Config // App configuration
+	store         *store.Store   // Local metadata database
+	uploader      *Uploader      // Worker that handles actual upload logic
+	logger        *slog.Logger   // Structured logger
+	stop          chan struct{}  // Channel to signal shutdown
+	jobs          chan store.FileRecord
+	pending       map[string]struct{}
+	pendingMu     sync.Mutex
+	wg            sync.WaitGroup
+	statsMu       sync.Mutex
+	ingestedCount int
+	totalLatency  time.Duration
 }
 
 // NewIngester creates a new Ingester instance.
@@ -141,7 +141,7 @@ func (i *Ingester) processBatch() {
 			i.pendingMu.Lock()
 			delete(i.pending, f.Path)
 			i.pendingMu.Unlock()
-			i.logger.Warn("Ingest job queue full, skipping file", "path", f.Path)
+			i.logger.Warn("Ingest job queue full, processed in next polling cycle ", "path", f.Path)
 		}
 	}
 }

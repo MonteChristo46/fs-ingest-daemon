@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-VERSION="0.5.2-alpha"
+VERSION="0.6.1-alpha"
 
 # Print colored banner
 printf "\033[38;2;156;39;176m   __                __ \033[0m

@@ -2,9 +2,9 @@
   "device_id": "d6:76:9c:79:a2:fc",
   "endpoint": "https://glitch-hunt-ingestion.my-basement.cloud",
   "max_data_size_gb": 1,
-  "watch_path": "./data",
-  "log_path": "./hunt.log",
-  "db_path": "./hunt.db",
+  "watch_path": "/Users/danielhoschele/Desktop/source-tree/glitch-hunt-monolith/services/fs-ingest-daemon",
+  "log_path": "/Users/danielhoschele/Desktop/source-tree/glitch-hunt-monolith/services/fs-ingest-daemon/hunt.log",
+  "db_path": "/Users/danielhoschele/Desktop/source-tree/glitch-hunt-monolith/services/fs-ingest-daemon/hunt.db",
   "ingest_check_interval": "20ms",
   "ingest_batch_size": 10,
   "ingest_worker_count": 5,
@@ -28,5 +28,8 @@
     ".json",
     ".jpg",
     ".jpeg"
-  ]
+  ],
+  "image_compression_enabled": true,
+  "image_max_dimension_px": 400,
+  "image_compression_quality": 80
 }

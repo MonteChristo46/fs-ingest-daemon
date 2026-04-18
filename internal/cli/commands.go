@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"fs-ingest-daemon/assets"
@@ -138,12 +139,75 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 			}
 			switch status {
 			case service.StatusRunning:
-				fmt.Println("Running")
+				fmt.Println("Status: Running")
 			case service.StatusStopped:
-				fmt.Println("Stopped")
+				fmt.Println("Status: Stopped")
 			default:
-				fmt.Println("Unknown/Other")
+				fmt.Println("Status: Unknown/Other")
 			}
+
+			cfg, err := config.Load(cfgPath)
+			if err == nil {
+				fmt.Printf("Loading Dock (Watch Path): %s\n", cfg.WatchPath)
+			}
+		},
+	}
+
+	var watchCmd = &cobra.Command{
+		Use:   "watch [path]",
+		Short: "Set the Loading Dock folder and restart the daemon",
+		PreRun: RequireAdmin,
+		Run: func(cmd *cobra.Command, args []string) {
+			targetDir := "."
+			if len(args) > 0 {
+				targetDir = args[0]
+			}
+
+			absPath, err := filepath.Abs(targetDir)
+			if err != nil {
+				fmt.Printf("Error resolving path: %v\n", err)
+				return
+			}
+
+			info, err := os.Stat(absPath)
+			if err != nil {
+				fmt.Printf("Error accessing path: %v\n", err)
+				return
+			}
+			if !info.IsDir() {
+				fmt.Printf("Error: Path is not a directory: %s\n", absPath)
+				return
+			}
+
+			cfg, err := config.Load(cfgPath)
+			if err != nil {
+				fmt.Printf("Error loading config: %v\n", err)
+				return
+			}
+
+			cfg.WatchPath = absPath
+			if err := config.Save(cfgPath, cfg); err != nil {
+				fmt.Printf("Error saving config: %v\n", err)
+				return
+			}
+
+			fmt.Printf("Loading Dock set to %s.\n", absPath)
+
+			err = s.Restart()
+			if err != nil {
+				if strings.Contains(err.Error(), "is not running") || strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "is not installed") {
+					errStart := s.Start()
+					if errStart != nil {
+						fmt.Printf("Service is not running or installed. Configuration updated successfully, but couldn't start service.\n")
+					} else {
+						fmt.Println("Service started.")
+					}
+				} else {
+					fmt.Printf("Failed to restart service: %s\n", err)
+				}
+				return
+			}
+			fmt.Println("Service restarted.")
 		},
 	}
 
@@ -178,6 +242,7 @@ func NewRootCmd(s service.Service, logger *slog.Logger, logPath string, cfgPath 
 		restartCmd,
 		runCmd,
 		statusCmd,
+		watchCmd,
 		logsCmd,
 		SimulateCmd(logger),
 	)

@@ -1,6 +1,6 @@
-# Project: fs-ingest-daemon
+# Project: hunt daemon
 
-The primary goal of fs-ingest-daemon is to provide a zero-dependency, resilient data bridge that transforms local file-system events into structured cloud data. It aims to solve the "Last Mile" problem of edge computing: ensuring that images are captured, metadata is extracted from context, and data is safely uploaded to a cloud pipeline even in environments with intermittent connectivity or limited storage.
+The primary goal of hunt daemon is to provide a zero-dependency, resilient data bridge that transforms local file-system events into structured cloud data. It aims to solve the "Last Mile" problem of edge computing: ensuring that images are captured, metadata is extracted from context, and data is safely uploaded to a cloud pipeline even in environments with intermittent connectivity or limited storage.
 
 ## General instructions
 
