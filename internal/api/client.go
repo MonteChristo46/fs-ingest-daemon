@@ -121,7 +121,6 @@ func (c *Client) RequestPairingCode(deviceID string) (*PairingResponse, error) {
 // CheckPairingStatus checks if the device has been claimed.
 func (c *Client) CheckPairingStatus(deviceID string, code string) (*PairingStatusResponse, error) {
 	url := fmt.Sprintf("%s/v1/pairing/status?device_id=%s&code=%s", c.BaseURL, deviceID, code)
-	fmt.Printf("DEBUG: Checking status at %s\n", url)
 	resp, err := c.HTTPClient.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check pairing status: %w", err)
