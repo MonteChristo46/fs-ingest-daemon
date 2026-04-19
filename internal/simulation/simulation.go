@@ -2,6 +2,7 @@ package simulation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -39,10 +40,11 @@ type Config struct {
 }
 
 type Simulator struct {
-	cfg         Config
-	categories  []string
-	goodFiles   map[string][]string // category -> list of good file paths
-	defectFiles map[string][]string // category -> list of defect file paths
+	cfg          Config
+	categories   []string
+	goodFiles    map[string][]string // category -> list of good file paths
+	defectFiles  map[string][]string // category -> list of defect file paths
+	contextFiles []string            // list of cached context json paths
 }
 
 func New(cfg Config) (*Simulator, error) {
@@ -86,6 +88,12 @@ func (s *Simulator) scanSourceDir() error {
 			return fs.SkipDir
 		}
 		if d.IsDir() {
+			return nil
+		}
+
+		// Check for context json files
+		if strings.HasSuffix(strings.ToLower(path), "context.json") || strings.HasSuffix(strings.ToLower(path), "context_1.json") || strings.HasSuffix(strings.ToLower(path), "context_2.json") {
+			s.contextFiles = append(s.contextFiles, path)
 			return nil
 		}
 
@@ -284,51 +292,39 @@ func (s *Simulator) generateFile() error {
 
 	if !strings.HasSuffix(targetPath, ".json") {
 		jsonPath := targetPath + ".json"
+		
+		contextMap := map[string]interface{}{}
 
-		var contextFiles []string
-		fs.WalkDir(s.cfg.SourceFS, ".", func(path string, d fs.DirEntry, err error) error {
-			if err == nil && !d.IsDir() && (strings.HasSuffix(strings.ToLower(path), "context.json") || strings.HasSuffix(strings.ToLower(path), "context_1.json") || strings.HasSuffix(strings.ToLower(path), "context_2.json")) {
-				contextFiles = append(contextFiles, path)
-			}
-			return nil
-		})
-
-		var jsonContent []byte
-		if len(contextFiles) > 0 {
-			ctxPath := contextFiles[rand.Intn(len(contextFiles))]
+		// Try to load a cached context JSON file
+		if len(s.contextFiles) > 0 {
+			ctxPath := s.contextFiles[rand.Intn(len(s.contextFiles))]
 			if ctxFile, err := s.cfg.SourceFS.Open(ctxPath); err == nil {
-				jsonContent, _ = io.ReadAll(ctxFile)
+				jsonContent, _ := io.ReadAll(ctxFile)
 				ctxFile.Close()
+				
+				// Unmarshal static JSON to dynamically inject properties
+				json.Unmarshal(jsonContent, &contextMap)
 			}
 		}
 
-		if len(jsonContent) == 0 {
-			contextMap := map[string]interface{}{
-				"simulation": true,
-				"category":   category,
-				"is_defect":  isDefect,
-				"timestamp":  time.Now().Format(time.RFC3339),
-			}
-			if factory != "" {
-				contextMap["factory"] = factory
-			}
-			if line != "" {
-				contextMap["line"] = line
-			}
-
-			var jsonParts []string
-			for k, v := range contextMap {
-				switch val := v.(type) {
-				case string:
-					jsonParts = append(jsonParts, fmt.Sprintf(`"%s": %q`, k, val))
-				case bool:
-					jsonParts = append(jsonParts, fmt.Sprintf(`"%s": %t`, k, val))
-				}
-			}
-			jsonContent = []byte(fmt.Sprintf("{%s}", strings.Join(jsonParts, ", ")))
+		// Inject/Overwrite dynamic simulation properties
+		contextMap["simulation"] = true
+		contextMap["category"] = category
+		contextMap["is_defect"] = isDefect
+		contextMap["timestamp"] = time.Now().Format(time.RFC3339)
+		if factory != "" {
+			contextMap["factory"] = factory
+		}
+		if line != "" {
+			contextMap["line"] = line
 		}
 
-		if err := os.WriteFile(jsonPath, jsonContent, 0644); err != nil {
+		finalJsonContent, err := json.MarshalIndent(contextMap, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to encode sidecar json: %w", err)
+		}
+
+		if err := os.WriteFile(jsonPath, finalJsonContent, 0644); err != nil {
 			return fmt.Errorf("failed to write sidecar file: %w", err)
 		}
 		s.cfg.Logger.Debug("Generated sidecar", "path", jsonPath)
