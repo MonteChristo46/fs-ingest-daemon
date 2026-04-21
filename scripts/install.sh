@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-VERSION="0.8.7-alpha"
+VERSION="0.8.8-alpha"
 
 # Print colored banner
 printf "\033[38;2;156;39;176m   __                __ \033[0m
