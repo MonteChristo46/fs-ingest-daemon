@@ -38,13 +38,14 @@ func NewIngester(cfg *config.Config, s *store.Store, logger *slog.Logger) *Inges
 	uploader := NewUploader(cfg, s, client, logger)
 
 	return &Ingester{
-		cfg:      cfg,
-		store:    s,
-		uploader: uploader,
-		logger:   logger,
-		stop:     make(chan struct{}),
-		jobs:     make(chan store.FileRecord, cfg.IngestBatchSize),
-		pending:  make(map[string]struct{}),
+		cfg:            cfg,
+		store:          s,
+		uploader:       uploader,
+		logger:         logger,
+		stop:           make(chan struct{}),
+		jobs:           make(chan store.FileRecord, cfg.IngestBatchSize),
+		pending:        make(map[string]struct{}),
+		currentBackoff: 10 * time.Second,
 	}
 }
 
@@ -179,4 +180,3 @@ func (i *Ingester) worker() {
 		i.pendingMu.Unlock()
 	}
 }
-
