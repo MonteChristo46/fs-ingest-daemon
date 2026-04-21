@@ -104,10 +104,23 @@ func (p *Pruner) Prune() {
 
 		// Backpressure mechanism:
 		// If the disk is full but we have no uploaded files to delete, we are in a critical state.
-		// We cannot delete PENDING files as that would mean data loss.
+		// We cannot delete PENDING files as that would mean data loss... UNLESS quota is exceeded.
 		if len(candidates) == 0 {
-			p.logger.Warn("Pruner: Disk usage high but no UPLOADED files to delete! Backpressure active.", "current_size", currentSize)
-			return
+			if p.store.IsQuotaExceeded() {
+				p.logger.Warn("Pruner: Quota exceeded and disk full. Deleting oldest PENDING files to make room for new data.")
+				candidates, err = p.store.GetOldestPendingFiles(p.cfg.PruneBatchSize)
+				if err != nil {
+					p.logger.Error("Pruner: Error fetching pending candidates", "error", err)
+					return
+				}
+				if len(candidates) == 0 {
+					p.logger.Warn("Pruner: Quota exceeded but no PENDING files to delete! Backpressure active.", "current_size", currentSize)
+					return
+				}
+			} else {
+				p.logger.Warn("Pruner: Disk usage high but no UPLOADED files to delete! Backpressure active.", "current_size", currentSize)
+				return
+			}
 		}
 
 		deletedCount := 0

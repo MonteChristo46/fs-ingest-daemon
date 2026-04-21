@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -36,7 +37,18 @@ type FileRecord struct {
 
 // Store wraps the SQL database connection.
 type Store struct {
-	db *sql.DB
+	db            *sql.DB
+	quotaExceeded atomic.Bool
+}
+
+// SetQuotaExceeded updates the quota exceeded state.
+func (s *Store) SetQuotaExceeded(exceeded bool) {
+	s.quotaExceeded.Store(exceeded)
+}
+
+// IsQuotaExceeded returns the current quota exceeded state.
+func (s *Store) IsQuotaExceeded() bool {
+	return s.quotaExceeded.Load()
 }
 
 // NewStore initializes the SQLite database connection and runs migrations.
@@ -271,6 +283,35 @@ func (s *Store) GetTotalSize() (int64, error) {
 	var size int64
 	err := s.db.QueryRow(query).Scan(&size)
 	return size, err
+}
+
+// GetOldestPendingFiles returns a list of files that are PENDING to be uploaded.
+// Files are returned in order of Modification Time (oldest first).
+func (s *Store) GetOldestPendingFiles(limit int) ([]FileRecord, error) {
+	query := `
+	SELECT id, path, size, mod_time, status, uploaded_at, partner_path
+	FROM files
+	WHERE status = ?
+	ORDER BY mod_time ASC
+	LIMIT ?
+	`
+	rows, err := s.db.Query(query, StatusPending, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var candidates []FileRecord
+	for rows.Next() {
+		var f FileRecord
+		err := rows.Scan(&f.ID, &f.Path, &f.Size, &f.ModTime, &f.Status, &f.UploadedAt, &f.PartnerPath)
+		if err != nil {
+			return nil, err
+		}
+		candidates = append(candidates, f)
+	}
+
+	return candidates, nil
 }
 
 // GetPruneCandidates returns a list of files that are safe to delete (Status=UPLOADED).

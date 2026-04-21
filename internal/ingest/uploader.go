@@ -21,6 +21,15 @@ import (
 	"time"
 )
 
+type UploadResult int
+
+const (
+	ResultSuccess UploadResult = iota
+	ResultError
+	ResultQuotaExceeded
+	ResultSkipped
+)
+
 // Uploader handles the details of uploading a single file.
 type Uploader struct {
 	cfg       *config.Config
@@ -46,7 +55,7 @@ func NewUploader(cfg *config.Config, s *store.Store, client *api.Client, logger 
 // 4. Upload file content to the provided URL.
 // 5. Confirm success with the API.
 // 6. Mark file as UPLOADED in local store.
-func (u *Uploader) Process(f store.FileRecord) (bool, time.Duration) {
+func (u *Uploader) Process(f store.FileRecord) (UploadResult, time.Duration) {
 	processStart := time.Now()
 
 	// 0. Check if this is a metadata file
@@ -55,7 +64,7 @@ func (u *Uploader) Process(f store.FileRecord) (bool, time.Duration) {
 	if filepath.Ext(f.Path) == ".json" {
 		if f.PartnerPath.Valid && f.PartnerPath.String != "" {
 			u.logger.Debug("Skipping metadata file, waiting for partner", "path", f.Path, "partner", f.PartnerPath.String)
-			return false, 0
+			return ResultSkipped, 0
 		}
 		// If it's an orphan json (no partner detected or partner lost), we process it.
 	}
@@ -114,17 +123,24 @@ func (u *Uploader) Process(f store.FileRecord) (bool, time.Duration) {
 		if os.IsNotExist(res.err) {
 			u.logger.Warn("Ingester: File vanished before processing, removing from DB", "path", f.Path)
 			_ = u.store.RemoveFile(f.Path)
-			return false, 0
+			return ResultSkipped, 0
 		}
 		u.logger.Error("Ingester: Failed to calculate checksum", "path", f.Path, "error", res.err)
-		return false, 0
+		return ResultError, 0
 	}
 	req.SHA256Checksum = res.sum
 
 	resp, err := u.apiClient.Ingest(req)
 	if err != nil {
+		if apiErr, ok := err.(*api.APIError); ok {
+			if apiErr.StatusCode == http.StatusPaymentRequired || apiErr.StatusCode == http.StatusForbidden {
+				u.logger.Warn("Ingester: Quota exceeded or forbidden", "path", f.Path, "status", apiErr.StatusCode, "message", apiErr.Message)
+				u.store.SetQuotaExceeded(true)
+				return ResultQuotaExceeded, 0
+			}
+		}
 		u.logger.Error("Ingester: Ingest request failed", "path", f.Path, "error", err)
-		return false, 0
+		return ResultError, 0
 	}
 
 	// 4. Upload to Presigned URL
@@ -142,7 +158,7 @@ func (u *Uploader) Process(f store.FileRecord) (bool, time.Duration) {
 			ErrorMessage: &errMsg,
 		}
 		_ = u.apiClient.Confirm(failReq)
-		return false, 0
+		return ResultError, 0
 	}
 	uploadDuration := time.Since(uploadStart)
 
@@ -165,7 +181,7 @@ func (u *Uploader) Process(f store.FileRecord) (bool, time.Duration) {
 		u.logger.Error("Ingester: Confirm request failed", "path", f.Path, "handshake_id", resp.HandshakeID, "error", err)
 		// Note: If confirm fails, we do NOT mark as uploaded locally.
 		// This ensures the file is retried in the next batch.
-		return false, 0
+		return ResultError, 0
 	}
 
 	// 6. Mark as Uploaded in local DB
@@ -173,6 +189,7 @@ func (u *Uploader) Process(f store.FileRecord) (bool, time.Duration) {
 		u.logger.Error("Ingester: Failed to mark as uploaded", "path", f.Path, "error", err)
 	} else {
 		u.logger.Debug("Upload success", "path", f.Path, "duration", uploadDuration)
+		u.store.SetQuotaExceeded(false)
 		// If we have a partner, mark it as uploaded too
 		if f.PartnerPath.Valid && f.PartnerPath.String != "" {
 			if err := u.store.MarkUploaded(f.PartnerPath.String); err != nil {
@@ -180,7 +197,7 @@ func (u *Uploader) Process(f store.FileRecord) (bool, time.Duration) {
 			}
 		}
 	}
-	return true, time.Since(processStart)
+	return ResultSuccess, time.Since(processStart)
 }
 
 // uploadFile performs a PUT request to upload the file content to the destination URL.

@@ -15,18 +15,21 @@ import (
 
 // Ingester manages the file ingestion pipeline.
 type Ingester struct {
-	cfg           *config.Config // App configuration
-	store         *store.Store   // Local metadata database
-	uploader      *Uploader      // Worker that handles actual upload logic
-	logger        *slog.Logger   // Structured logger
-	stop          chan struct{}  // Channel to signal shutdown
-	jobs          chan store.FileRecord
-	pending       map[string]struct{}
-	pendingMu     sync.Mutex
-	wg            sync.WaitGroup
-	statsMu       sync.Mutex
-	ingestedCount int
-	totalLatency  time.Duration
+	cfg            *config.Config // App configuration
+	store          *store.Store   // Local metadata database
+	uploader       *Uploader      // Worker that handles actual upload logic
+	logger         *slog.Logger   // Structured logger
+	stop           chan struct{}  // Channel to signal shutdown
+	jobs           chan store.FileRecord
+	pending        map[string]struct{}
+	pendingMu      sync.Mutex
+	wg             sync.WaitGroup
+	statsMu        sync.Mutex
+	ingestedCount  int
+	totalLatency   time.Duration
+	nextRetryTime  time.Time
+	currentBackoff time.Duration
+	backoffMu      sync.Mutex
 }
 
 // NewIngester creates a new Ingester instance.
@@ -148,13 +151,27 @@ func (i *Ingester) processBatch() {
 
 func (i *Ingester) worker() {
 	for f := range i.jobs {
-		success, latency := i.uploader.Process(f)
+		result, latency := i.uploader.Process(f)
 
-		if success {
+		if result == ResultSuccess {
 			i.statsMu.Lock()
 			i.ingestedCount++
 			i.totalLatency += latency
 			i.statsMu.Unlock()
+
+			i.backoffMu.Lock()
+			i.currentBackoff = 10 * time.Second
+			i.nextRetryTime = time.Time{}
+			i.backoffMu.Unlock()
+		} else if result == ResultQuotaExceeded {
+			i.backoffMu.Lock()
+			i.nextRetryTime = time.Now().Add(i.currentBackoff)
+			i.logger.Warn("Ingester: Backing off due to quota exceeded", "backoff", i.currentBackoff)
+			i.currentBackoff *= 2
+			if i.currentBackoff > 5*time.Minute {
+				i.currentBackoff = 5 * time.Minute
+			}
+			i.backoffMu.Unlock()
 		}
 
 		i.pendingMu.Lock()
@@ -162,3 +179,4 @@ func (i *Ingester) worker() {
 		i.pendingMu.Unlock()
 	}
 }
+

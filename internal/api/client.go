@@ -13,6 +13,16 @@ import (
 	"time"
 )
 
+// APIError represents an error returned by the API with an HTTP status code.
+type APIError struct {
+	StatusCode int
+	Message    string
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("api error: status %d: %s", e.StatusCode, e.Message)
+}
+
 // Client is the HTTP client wrapper for communicating with the Ingestion API.
 type Client struct {
 	BaseURL    string       // The root URL of the API
@@ -57,7 +67,10 @@ func (c *Client) Ingest(req IngestRequest) (*IngestResponse, error) {
 
 	if resp.StatusCode != http.StatusCreated {
 		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("ingest request failed with status %d: %s", resp.StatusCode, string(respBody))
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(respBody),
+		}
 	}
 
 	var ingestResp IngestResponse
