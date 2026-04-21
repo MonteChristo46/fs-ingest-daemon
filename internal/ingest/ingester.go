@@ -121,6 +121,13 @@ func (i *Ingester) Stop() {
 
 // processBatch fetches a batch of PENDING files from the store and triggers their upload.
 func (i *Ingester) processBatch() {
+	i.backoffMu.Lock()
+	if !i.nextRetryTime.IsZero() && time.Now().Before(i.nextRetryTime) {
+		i.backoffMu.Unlock()
+		return
+	}
+	i.backoffMu.Unlock()
+
 	// Fetch pending files based on batch size config
 	files, err := i.store.GetPendingFiles(i.cfg.IngestBatchSize)
 	if err != nil {
@@ -164,10 +171,16 @@ func (i *Ingester) worker() {
 			i.currentBackoff = 10 * time.Second
 			i.nextRetryTime = time.Time{}
 			i.backoffMu.Unlock()
-		} else if result == ResultQuotaExceeded {
+		} else if result == ResultQuotaExceeded || result == ResultError {
 			i.backoffMu.Lock()
 			i.nextRetryTime = time.Now().Add(i.currentBackoff)
-			i.logger.Warn("Ingester: Backing off due to quota exceeded", "backoff", i.currentBackoff)
+
+			reason := "error"
+			if result == ResultQuotaExceeded {
+				reason = "quota exceeded"
+			}
+
+			i.logger.Warn("Ingester: Backing off", "reason", reason, "backoff", i.currentBackoff)
 			i.currentBackoff *= 2
 			if i.currentBackoff > 5*time.Minute {
 				i.currentBackoff = 5 * time.Minute
