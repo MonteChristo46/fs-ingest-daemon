@@ -158,6 +158,9 @@ func InstallCmd(s service.Service) *cobra.Command {
 						generateNewConfig = true
 					}
 				} else {
+					// Clear the auth token to force re-pairing on reinstall
+					cfg.AuthToken = ""
+
 					fmt.Print("   Do you want to update your configuration? [y/N]: ")
 					var response string
 					fmt.Scanln(&response)

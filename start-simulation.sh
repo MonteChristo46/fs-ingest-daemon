@@ -1,23 +1,13 @@
 #!/bin/bash
 
 # Configuration
-SOURCE_DIR="./test-data/mvtec_anomaly_detection"
-TARGET_DIR="$HOME/glitch-hunt/input"
-DB_PATH="$HOME/glitch-hunt/hunt.db"
-LOG_FILE="./simulation.log"
+DATASET="${DATASET:-visa}"
 
-DEFECT_RATE="1.0"
-JITTER="0.2"
-NESTED="false"
-
-# Example: Run multiple categories with varying rates
-# If argument is provided, just run that one category with a default rate
-if [ -n "$1" ]; then
-    CATEGORY_CONFIGS=("$1:1s")
-else
+if [ "$DATASET" == "mvtec" ]; then
+    SOURCE_DIR="./test-data/mvtec_anomaly_detection"
     # Default multi-category simulation
-    CATEGORY_CONFIGS=(
-        "wood:0.5s"
+    DEFAULT_CATEGORY_CONFIGS=(
+        #"wood:0.5s"
         #"metal_nut:1s"
         #"bottle:1s"
         #"cable:1s"
@@ -31,6 +21,47 @@ else
         #"transistor:30s"
         #"grid:60s"
     )
+elif [ "$DATASET" == "visa" ]; then
+    SOURCE_DIR="./test-data/visa_converted"
+    # Automatically transform VisA if not already done
+    if [ ! -d "$SOURCE_DIR" ]; then
+        echo "VisA converted directory not found. Running transformation..."
+        ./scripts/transform-visa.sh || { echo "Transformation failed"; exit 1; }
+    fi
+    # Default multi-category simulation for VisA
+    DEFAULT_CATEGORY_CONFIGS=(
+        #"candle:0.5s"
+        #"capsules:0.5s"
+        #"cashew:0.5s"
+        #"chewinggum:1s"
+        #"fryum:1s"
+        #"macaroni1:1s"
+        "macaroni2:1s"
+        #"pcb1:1s"
+        #"pcb2:1s"
+        #"pcb3:0.5s"
+        #"pcb4:0.5s"
+        "pipe_fryum:1s"
+    )
+else
+    echo "Unknown dataset: $DATASET. Use 'mvtec' or 'visa'."
+    exit 1
+fi
+
+TARGET_DIR="$HOME/glitch-hunt/input"
+DB_PATH="$HOME/glitch-hunt/hunt.db"
+LOG_FILE="./simulation.log"
+
+DEFECT_RATE="1.0"
+JITTER="0.2"
+NESTED="false"
+
+# Example: Run multiple categories with varying rates
+# If argument is provided, just run that one category with a default rate
+if [ -n "$1" ]; then
+    CATEGORY_CONFIGS=("$1:1s")
+else
+    CATEGORY_CONFIGS=("${DEFAULT_CATEGORY_CONFIGS[@]}")
 fi
 
 echo "--- CLEANUP ---"
