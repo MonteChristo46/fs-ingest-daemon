@@ -30,8 +30,8 @@ elif [ "$DATASET" == "visa" ]; then
     fi
     # Default multi-category simulation for VisA
     DEFAULT_CATEGORY_CONFIGS=(
-        #"candle:0.5s"
-        #"capsules:0.5s"
+        "candle:2s"
+        "capsules:1s"
         #"cashew:0.5s"
         #"chewinggum:1s"
         #"fryum:1s"
@@ -41,7 +41,7 @@ elif [ "$DATASET" == "visa" ]; then
         #"pcb2:1s"
         #"pcb3:0.5s"
         #"pcb4:0.5s"
-        "pipe_fryum:1s"
+        "pipe_fryum:0.5s"
     )
 else
     echo "Unknown dataset: $DATASET. Use 'mvtec' or 'visa'."
@@ -52,9 +52,9 @@ TARGET_DIR="$HOME/glitch-hunt/input"
 DB_PATH="$HOME/glitch-hunt/hunt.db"
 LOG_FILE="./simulation.log"
 
-DEFECT_RATE="1.0"
+DEFECT_RATE="0.01"
 JITTER="0.2"
-NESTED="false"
+NESTED="true"
 
 # Example: Run multiple categories with varying rates
 # If argument is provided, just run that one category with a default rate
