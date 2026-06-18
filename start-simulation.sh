@@ -7,7 +7,7 @@ if [ "$DATASET" == "mvtec" ]; then
     SOURCE_DIR="./test-data/mvtec_anomaly_detection"
     # Default multi-category simulation
     DEFAULT_CATEGORY_CONFIGS=(
-        #"wood:0.5s"
+        "wood:0.5s"
         #"metal_nut:1s"
         #"bottle:1s"
         #"cable:1s"
@@ -48,7 +48,7 @@ else
     exit 1
 fi
 
-TARGET_DIR="$HOME/glitch-hunt/input"
+TARGET_DIR="$HOME/fsd/input"
 DB_PATH="$HOME/glitch-hunt/hunt.db"
 LOG_FILE="./simulation.log"
 
