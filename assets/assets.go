@@ -23,6 +23,6 @@ func Version() string {
 func Banner() string {
 	b := strings.ReplaceAll(rawBanner, "\\033", "\x1b")
 	// Add Daemon version suffix
-	b += " \x1b[38;2;200;200;200mFS INGEST DAEMON | v" + Version() + "\x1b[0m\n"
+	b += " \x1b[38;2;200;200;200mHUNT DAEMON | v" + Version() + "\x1b[0m\n"
 	return b
 }

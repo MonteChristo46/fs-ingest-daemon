@@ -1,65 +1,92 @@
 #!/bin/bash
 
 # Configuration
-DATASET="${DATASET:-visa}"
+DATASET="${DATASET:-both}"
+
+# Source directories by dataset
+MVTEC_SOURCE="./test-data/mvtec_anomaly_detection"
+VISA_SOURCE="./test-data/visa_converted"
+
+# VisA auto-transformation
+if [ ! -d "$VISA_SOURCE" ] && { [ "$DATASET" == "visa" ] || [ "$DATASET" == "both" ]; }; then
+    echo "VisA converted directory not found. Running transformation..."
+    ./scripts/transform-visa.sh || { echo "Transformation failed"; exit 1; }
+fi
+
+# Category configs by dataset
+MVTEC_CONFIGS=(
+    "wood:3s"
+    #"metal_nut:1s"
+    "bottle:36s"
+    "cable:12s"
+    "capsule:120s"
+    #"hazelnut:1s"
+    #"zipper:60s"
+    #"leather:10s"
+    "screw:24s"
+    "tile:30s"
+    "toothbrush:30s"
+    "transistor:60s"
+    #"grid:60s"
+)
+VISA_CONFIGS=(
+    "candle:12s"
+    "capsules:120s"
+    #"cashew:0.5s"
+    #"chewinggum:1s"
+    "fryum:120s"
+    "macaroni1:60s"
+    #"macaroni2:1s"
+    "pcb1:30s"
+    "pcb2:30s"
+    "pcb3:20s"
+    "pcb4:30s"
+    #"pipe_fryum:0.5s"
+)
+
+# Build source/category pairs based on DATASET
+declare -a SOURCE_DIRS
+declare -a CATEGORY_CONFIGS
 
 if [ "$DATASET" == "mvtec" ]; then
-    SOURCE_DIR="./test-data/mvtec_anomaly_detection"
-    # Default multi-category simulation
-    DEFAULT_CATEGORY_CONFIGS=(
-        "wood:0.5s"
-        #"metal_nut:1s"
-        #"bottle:1s"
-        #"cable:1s"
-        #"capsule:1s"
-        #"hazelnut:1s"
-        #"zipper:10s"
-        #"leather:10s"
-        #"screw:10s"
-        #"tile:30s"
-        #"toothbrush:30s"
-        #"transistor:30s"
-        #"grid:60s"
-    )
+    SOURCE_DIRS=("$MVTEC_SOURCE")
+    CATEGORY_CONFIGS=("${MVTEC_CONFIGS[@]}")
 elif [ "$DATASET" == "visa" ]; then
-    SOURCE_DIR="./test-data/visa_converted"
-    # Automatically transform VisA if not already done
-    if [ ! -d "$SOURCE_DIR" ]; then
-        echo "VisA converted directory not found. Running transformation..."
-        ./scripts/transform-visa.sh || { echo "Transformation failed"; exit 1; }
-    fi
-    # Default multi-category simulation for VisA
-    DEFAULT_CATEGORY_CONFIGS=(
-        "candle:2s"
-        "capsules:1s"
-        #"cashew:0.5s"
-        #"chewinggum:1s"
-        #"fryum:1s"
-        #"macaroni1:1s"
-        "macaroni2:1s"
-        #"pcb1:1s"
-        #"pcb2:1s"
-        #"pcb3:0.5s"
-        #"pcb4:0.5s"
-        "pipe_fryum:0.5s"
-    )
+    SOURCE_DIRS=("$VISA_SOURCE")
+    CATEGORY_CONFIGS=("${VISA_CONFIGS[@]}")
+elif [ "$DATASET" == "both" ]; then
+    # Prepend source directory to each config for disambiguation
+    for cfg in "${MVTEC_CONFIGS[@]}"; do
+        CATEGORY_CONFIGS+=("$MVTEC_SOURCE|$cfg")
+    done
+    for cfg in "${VISA_CONFIGS[@]}"; do
+        CATEGORY_CONFIGS+=("$VISA_SOURCE|$cfg")
+    done
 else
-    echo "Unknown dataset: $DATASET. Use 'mvtec' or 'visa'."
+    echo "Unknown dataset: $DATASET. Use 'mvtec', 'visa', or 'both'."
     exit 1
 fi
 
-TARGET_DIR="$HOME/fsd/input"
+TARGET_DIR="$HOME/glitch-hunt/input"
 DB_PATH="$HOME/glitch-hunt/hunt.db"
 LOG_FILE="./simulation.log"
 
 DEFECT_RATE="0.01"
 JITTER="0.2"
-NESTED="true"
+NESTED="false"
 
 # Example: Run multiple categories with varying rates
 # If argument is provided, just run that one category with a default rate
+# Support format: "category:rate" or "source|category:rate"
 if [ -n "$1" ]; then
-    CATEGORY_CONFIGS=("$1:1s")
+    SINGLE_CONFIG="$1"
+    # If it has a colon, use the user's rate; otherwise append ":1s"
+    case "$SINGLE_CONFIG" in
+        *\|*) ;;              # already has source prefix
+        *:*)  ;;              # already has rate
+        *)    SINGLE_CONFIG="$SINGLE_CONFIG:1s" ;;
+    esac
+    CATEGORY_CONFIGS=("$SINGLE_CONFIG")
 else
     CATEGORY_CONFIGS=("${DEFAULT_CATEGORY_CONFIGS[@]}")
 fi
@@ -96,19 +123,28 @@ cleanup() {
 trap cleanup INT TERM
 
 echo "--- STARTING SIMULATORS ---"
-echo "Source:      $SOURCE_DIR"
+echo "Dataset:     $DATASET"
 echo "Target:      $TARGET_DIR"
 echo "Defect Rate: $DEFECT_RATE"
 echo "Jitter:      $JITTER"
 echo "------------------------------------------------"
 
 for config in "${CATEGORY_CONFIGS[@]}"; do
-    category="${config%%:*}"
-    rate="${config#*:}"
+    # Combined entries (both mode): "source|category:rate"
+    # Simple entries: "category:rate"
+    if [[ "$config" == *"|"* ]]; then
+        src_dir="${config%%|*}"
+        rest="${config#*|}"
+    else
+        src_dir="$SOURCE_DIR"
+        rest="$config"
+    fi
+    category="${rest%%:*}"
+    rate="${rest#*:}"
     
-    echo "Starting simulation for category '$category' at rate '$rate'"
+    echo "Starting simulation for category '$category' at rate '$rate' [src: $src_dir]"
     ./hunt simulate \
-        --source "$SOURCE_DIR" \
+        --source "$src_dir" \
         --target "$TARGET_DIR" \
         --rate "$rate" \
         --categories "$category" \
