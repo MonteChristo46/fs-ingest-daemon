@@ -6,7 +6,19 @@ $VERSION="{{VERSION}}"
 $ESC = [char]27
 
 Write-Host "{{BANNER}}" -NoNewline
-Write-Host " $ESC[38;2;200;200;200mDAEMON INSTALLER | v$VERSION$ESC[0m`n"
+Write-Host " $ESC[38;2;200;200;200mDAEMON INSTALLER | v$VERSION$ESC[0m"
+Write-Host ""
+Write-Host "╔══════════════════════════════════════════════════════╗"
+Write-Host "║  Glitch Hunt — Edge Daemon Installer                ║"
+Write-Host "║                                                      ║"
+Write-Host "║  What this will do:                                 ║"
+Write-Host "║  • Download the daemon binary                       ║"
+Write-Host "║  • Install it as a background service               ║"
+Write-Host "║  • Guide you through setup (press Enter for default)║"
+Write-Host "╚══════════════════════════════════════════════════════╝"
+Write-Host ""
+$null = Read-Host "Press Enter to continue or Ctrl+C to cancel"
+Write-Host ""
 
 # Configuration
 $Url = "https://github.com/MonteChristo46/fs-ingest-daemon/raw/main/build/hunt-windows-amd64.exe"
@@ -19,14 +31,15 @@ $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Pri
 $IsAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 if (-not $IsAdmin) {
-    Write-Host "[ERROR] This script must be run as an Administrator."
+    Write-Host "  ✖ Requires Administrator privileges."
+    Write-Host "  Run PowerShell as Administrator and try again."
     exit 1
 }
 
-Write-Host "[SYSTEM] Running as ADMINISTRATOR"
+Write-Host "  ✓ Running as Administrator"
 
 # 2. Create Directory
-Write-Host "[CONFIG] Target Directory: $InstallDir"
+Write-Host "  ⚙ Install directory: $InstallDir"
 if (-not (Test-Path -Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir | Out-Null
 }
@@ -38,13 +51,15 @@ try {
     $Acl.SetAccessRule($Ar)
     Set-Acl $InstallDir $Acl
 } catch {
-    Write-Warning "[CONFIG] Could not explicitly set directory permissions. You might need to adjust them manually."
+    Write-Warning "  ⚠ Could not set directory permissions. Adjust manually if needed."
 }
 
 # 3. Download Binary
 $Target = Join-Path $InstallDir $BinName
-Write-Host "[STATUS] Downloading Hunt daemon..."
+Write-Host "  ↓ Downloading daemon..."
+$ProgressPreference = 'SilentlyContinue'
 Invoke-WebRequest -Uri $Url -OutFile $Target
+$ProgressPreference = 'Continue'
 
 # Unblock the file (Fix for "Access Denied" / Mark of the Web)
 Unblock-File -Path $Target
@@ -52,18 +67,20 @@ Unblock-File -Path $Target
 # 4. Update PATH (Persistent)
 $CurrentPath = [Environment]::GetEnvironmentVariable("Path", $PathScope)
 if ($CurrentPath -notlike "*$InstallDir*") {
-    Write-Host "[CONFIG] Adding $InstallDir to $PathScope PATH..."
+    Write-Host "  🔗 Adding $InstallDir to system PATH..."
     [Environment]::SetEnvironmentVariable("Path", "$CurrentPath;$InstallDir", $PathScope)
-    $env:Path += ";$InstallDir" # Update current session
+    $env:Path += ";$InstallDir"
 } else {
-    Write-Host "[CONFIG] PATH already configured."
+    Write-Host "  🔗 PATH already configured"
 }
 
 # 5. Run Install
-Write-Host "[STATUS] Running hunt install..."
-Write-Host "--------------------------------------------------"
+Write-Host ""
+Write-Host "  ── Configuration ──"
+Write-Host "  (Press Enter to accept each [default])"
+Write-Host ""
 & $Target install
 
-Write-Host "--------------------------------------------------"
-Write-Host "[SUCCESS] Installation wrapper complete. You can now use 'hunt'."
-Write-Host "[INFO] You may need to restart your terminal for PATH changes to take effect."
+Write-Host ""
+Write-Host "  Done. Use 'hunt' to manage the daemon."
+Write-Host "  (You may need to restart your terminal for PATH changes.)"

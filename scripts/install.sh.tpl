@@ -5,7 +5,28 @@ VERSION="{{VERSION}}"
 
 # Print colored banner
 printf "{{BANNER}}"
-printf " \033[38;2;200;200;200mDAEMON INSTALLER | v%s\033[0m\n\n" "$VERSION"
+printf " \033[38;2;200;200;200mDAEMON INSTALLER | v%s\033[0m\n" "$VERSION"
+
+echo ""
+echo "╔══════════════════════════════════════════════════════╗"
+echo "║  Glitch Hunt — Edge Daemon Installer                ║"
+echo "║                                                      ║"
+echo "║  What this will do:                                 ║"
+echo "║  • Download the daemon binary                       ║"
+echo "║  • Install it as a background service               ║"
+echo "║  • Guide you through setup (press Enter for default)║"
+echo "╚══════════════════════════════════════════════════════╝"
+echo ""
+
+# Confirm before proceeding (handle piped stdin)
+if [ -t 0 ]; then
+    printf "Press [Enter] to continue or Ctrl+C to cancel... "
+    read -r _
+elif [ -c /dev/tty ]; then
+    printf "Press [Enter] to continue or Ctrl+C to cancel... "
+    read -r _ < /dev/tty
+fi
+echo ""
 
 # Configuration
 INSTALL_DIR="/opt/hunt"
@@ -27,27 +48,27 @@ fi
 
 DOWNLOAD_URL="https://github.com/MonteChristo46/fs-ingest-daemon/raw/main/build/hunt-${OS}-${ARCH}"
 
-echo "[SYSTEM] Checking system requirements... [OK] ($OS / $ARCH)"
+echo "  ✓ System check passed  ($OS / $ARCH)"
 
 # Require Root Privilege
 if [ "$(id -u)" -ne 0 ]; then
-    echo "[SYSTEM] ❌ Error: This script must be run as root. Please use sudo."
+    echo "  ✖ Requires root privileges. Re-run with sudo."
     exit 1
 fi
-echo "[SYSTEM] Running as ROOT"
+echo "  ✓ Running with administrator privileges"
 
 # Prepare Directory
-echo "[CONFIG] Target Directory: $INSTALL_DIR"
+echo "  ⚙ Install directory: $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
 
 # Download Binary
 TARGET="${INSTALL_DIR}/${BIN_NAME}"
 
-echo "[STATUS] Downloading Hunt daemon..."
-curl -fsSL "$DOWNLOAD_URL" -o "$TARGET"
+echo "  ↓ Downloading daemon..."
+curl -fL --progress-bar "$DOWNLOAD_URL" -o "$TARGET"
 
 if [ ! -f "$TARGET" ]; then
-    echo "[ERROR] Download failed. File not found at $TARGET"
+    echo "  ✖ Download failed. File not found at $TARGET"
     exit 1
 fi
 
@@ -55,7 +76,7 @@ chmod +x "$TARGET"
 
 # macOS (Darwin) Fix: Apply ad-hoc signature to prevent "Killed: 9"
 if [ "$(uname -s)" = "Darwin" ]; then
-    echo "[STATUS] Applying macOS security fix (ad-hoc signing)... [OK]"
+    echo "  🔏 Applying macOS security fix..."
     # Remove quarantine attribute if present
     xattr -d com.apple.quarantine "$TARGET" 2>/dev/null || true
     # Force ad-hoc signing
@@ -63,27 +84,26 @@ if [ "$(uname -s)" = "Darwin" ]; then
 fi
 
 # Symlink to PATH
-echo "[CONFIG] Creating symlink at $SYMLINK_PATH..."
+echo "  🔗 Creating symlink at $SYMLINK_PATH"
 mkdir -p /usr/local/bin
 rm -f "$SYMLINK_PATH"
 ln -s "$TARGET" "$SYMLINK_PATH"
 
 # Run Installer
-echo "[STATUS] Running hunt install..."
-echo "--------------------------------------------------"
-# We redirect stdin from /dev/tty to ensure interactive prompts work
-# even when the script is piped via curl
+echo ""
+echo "  ── Configuration ──"
+echo "  (Press Enter to accept each [default])"
+echo ""
 if [ -t 0 ]; then
     "$TARGET" install
 else
-    # If not running in a terminal (e.g. piped), try to force TTY
     if [ -c /dev/tty ]; then
         "$TARGET" install < /dev/tty
     else
-        echo "> ⚠️  Warning: No TTY detected. Running in non-interactive mode."
+        echo "  ⚠ No TTY detected. Running in non-interactive mode."
         "$TARGET" install
     fi
 fi
 
-echo "--------------------------------------------------"
-echo "[SUCCESS] Installation wrapper complete. You can now use 'hunt'."
+echo ""
+echo "  Done. Use 'hunt' to manage the daemon."
