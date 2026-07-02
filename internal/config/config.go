@@ -34,6 +34,10 @@ type Config struct {
 	AuthToken                 string   `json:"auth_token"`                   // Token indicating the device is registered (or empty if not)
 	WebClientURL              string   `json:"web_client_url"`               // URL where the user claims the device
 	SidecarStrategy           string   `json:"sidecar_strategy"`             // "strict" (default) or "none" (image only)
+	TTLMaxAge                 string   `json:"ttl_max_age"`                  // Max age for completed files before TTL eviction (e.g. "1h")
+	TTLPruneInterval          string   `json:"ttl_prune_interval"`           // How often the TTL pruner runs (e.g. "1h")
+	TTLPruneBatchSize         int      `json:"ttl_prune_batch_size"`         // Files to delete per TTL cycle
+	TTLEnabled                bool     `json:"ttl_enabled"`                  // Enable/disable TTL pruning
 	LogMaxSizeMB              int      `json:"log_max_size_mb"`              // Max size in MB before rotation. Default 10.
 	LogMaxBackups             int      `json:"log_max_backups"`              // Max number of old files to keep. Default 3.
 	LogMaxAgeDays             int      `json:"log_max_age_days"`             // Max number of days to keep old files. Default 28.
@@ -42,6 +46,7 @@ type Config struct {
 	ImageCompressionEnabled   bool     `json:"image_compression_enabled"`    // Whether to resize and compress images before upload.
 	ImageMaxDimensionPx       int      `json:"image_max_dimension_px"`       // Max dimension (width or height) in pixels.
 	ImageCompressionQuality   int      `json:"image_compression_quality"`    // JPEG compression quality (1-100).
+	QuotaCheckInterval        string   `json:"quota_check_interval"`         // Duration string (e.g. "30s") for quota check probing.
 }
 
 var (
@@ -69,6 +74,11 @@ var (
 	DefaultImageCompressionEnabled   = true
 	DefaultImageMaxDimensionPx       = 400
 	DefaultImageCompressionQuality   = 80
+	DefaultTTLMaxAge                 = "1h"
+	DefaultTTLPruneInterval          = "1h"
+	DefaultTTLPruneBatchSize         = 100
+	DefaultTTLEnabled                = true
+	DefaultQuotaCheckInterval        = "30s"
 )
 
 // Load reads the configuration from the specified path.
@@ -105,6 +115,11 @@ func Load(path string) (*Config, error) {
 		ImageCompressionEnabled:   DefaultImageCompressionEnabled,
 		ImageMaxDimensionPx:       DefaultImageMaxDimensionPx,
 		ImageCompressionQuality:   DefaultImageCompressionQuality,
+		TTLMaxAge:                 DefaultTTLMaxAge,
+		TTLPruneInterval:          DefaultTTLPruneInterval,
+		TTLPruneBatchSize:         DefaultTTLPruneBatchSize,
+		TTLEnabled:                DefaultTTLEnabled,
+		QuotaCheckInterval:        DefaultQuotaCheckInterval,
 	}
 
 	f, err := os.Open(path)

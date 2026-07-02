@@ -6,6 +6,7 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -19,10 +20,14 @@ type FileStatus string
 
 const (
 	StatusPending         FileStatus = "PENDING"          // File is ready for upload (paired or orphan)
+	StatusProcessing      FileStatus = "PROCESSING"       // File atomically claimed by a worker
 	StatusUploaded        FileStatus = "UPLOADED"         // File confirmed uploaded
 	StatusAwaitingPartner FileStatus = "AWAITING_PARTNER" // File detected, waiting for sidecar/data
 	StatusOrphan          FileStatus = "ORPHAN"           // Partner did not arrive in time
+	StatusFailed          FileStatus = "FAILED"           // Upload permanently failed after max retries
 )
+
+const defaultMaxRetries = 3
 
 // FileRecord represents a row in the 'files' table.
 type FileRecord struct {
@@ -31,6 +36,9 @@ type FileRecord struct {
 	Size        int64
 	ModTime     time.Time
 	Status      FileStatus
+	RetryCount  int
+	MaxRetries  int
+	LastError   sql.NullString
 	UploadedAt  sql.NullTime
 	PartnerPath sql.NullString
 }
@@ -74,6 +82,10 @@ func NewStore(dbPath string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if _, err := db.Exec("PRAGMA auto_vacuum=INCREMENTAL;"); err != nil {
+		db.Close()
+		return nil, err
+	}
 
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
@@ -97,23 +109,29 @@ func (s *Store) migrate() error {
 		path TEXT NOT NULL UNIQUE,
 		size INTEGER NOT NULL,
 		mod_time DATETIME NOT NULL,
-		status TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'PENDING'
+			CHECK(status IN ('PENDING','PROCESSING','UPLOADED','AWAITING_PARTNER','ORPHAN','FAILED')),
+		retry_count INTEGER NOT NULL DEFAULT 0,
+		max_retries INTEGER NOT NULL DEFAULT 3,
+		last_error TEXT,
 		uploaded_at DATETIME,
 		partner_path TEXT
 	);
 	CREATE INDEX IF NOT EXISTS idx_status_mod_time ON files(status, mod_time);
+	CREATE INDEX IF NOT EXISTS idx_partner_path ON files(partner_path);
 	`
 	_, err := s.db.Exec(query)
-	// Check if partner_path column exists (migration for existing db)
-	if err == nil {
-		_, err = s.db.Exec("ALTER TABLE files ADD COLUMN partner_path TEXT;")
-		if err != nil {
-			// Ignore error if column likely already exists
-			// In a real app we'd check PRAGMA table_info
-			return nil
-		}
+	if err != nil {
+		return err
 	}
-	return err
+	// Migration: add columns for databases created before v0.10.0
+	_, _ = s.db.Exec("ALTER TABLE files ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0;")
+	_, _ = s.db.Exec("ALTER TABLE files ADD COLUMN max_retries INTEGER NOT NULL DEFAULT 3;")
+	_, _ = s.db.Exec("ALTER TABLE files ADD COLUMN last_error TEXT;")
+	_, _ = s.db.Exec("DROP INDEX IF EXISTS idx_status_mod_time;")
+	_, _ = s.db.Exec("CREATE INDEX IF NOT EXISTS idx_status_mod_time ON files(status, mod_time);")
+	_, _ = s.db.Exec("CREATE INDEX IF NOT EXISTS idx_partner_path ON files(partner_path);")
+	return nil
 }
 
 // RegisterFile handles the detection of a new file and attempts to pair it.
@@ -203,9 +221,11 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 			size = excluded.size,
 			mod_time = excluded.mod_time,
 			status = ?,
-			partner_path = ?;
+			partner_path = ?,
+			retry_count = 0,
+			last_error = NULL;
 		`
-		// Reset status to initialStatus even if it was previously something else (re-ingest)
+		// Reset status and retry state on re-registration
 		_, err = tx.Exec(query, path, size, modTime, initialStatus, pp, initialStatus, pp)
 		if err != nil {
 			return err
@@ -217,7 +237,6 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 		// 2. Update PARTNER to PENDING. Ensure their partner_path is ME.
 
 		// Insert/Update ME
-		// Note: We always have partnerPath set here (from the Scan).
 		queryMe := `
 		INSERT INTO files (path, size, mod_time, status, partner_path)
 		VALUES (?, ?, ?, ?, ?)
@@ -225,7 +244,9 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 			size = excluded.size,
 			mod_time = excluded.mod_time,
 			status = ?,
-			partner_path = ?;
+			partner_path = ?,
+			retry_count = 0,
+			last_error = NULL;
 		`
 		_, err = tx.Exec(queryMe, path, size, modTime, StatusPending, partnerPath, StatusPending, partnerPath)
 		if err != nil {
@@ -238,7 +259,8 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 		// This is vital for the Single Extension case:
 		// If Image was waiting for img.png.json, but img.json (ME) arrived and claimed it,
 		// we MUST update Image's partner_path to img.json (ME).
-		queryPartner := `UPDATE files SET status = ?, partner_path = ? WHERE id = ?`
+		// Also reset partner retry state since the file is ready again.
+		queryPartner := `UPDATE files SET status = ?, partner_path = ?, retry_count = 0, last_error = NULL WHERE id = ?`
 		_, err = tx.Exec(queryPartner, StatusPending, path, partnerID)
 		if err != nil {
 			return err
@@ -267,29 +289,128 @@ func (s *Store) AddOrUpdateFile(path string, size int64, modTime time.Time) erro
 }
 
 // MarkUploaded updates the status of a file to UPLOADED and sets the uploaded_at timestamp.
+// Accepts any non-terminal status to handle direct marking (tests, orphan json, etc.).
 func (s *Store) MarkUploaded(path string) error {
-	query := `
-	UPDATE files 
-	SET status = ?, uploaded_at = ?
-	WHERE path = ?;
-	`
-	_, err := s.db.Exec(query, StatusUploaded, time.Now(), path)
+	_, err := s.db.Exec(
+		`UPDATE files SET status = ?, uploaded_at = ? WHERE path = ? AND status != ?`,
+		StatusUploaded, time.Now(), path, StatusUploaded,
+	)
 	return err
 }
 
-// GetTotalSize returns the sum of the size of all tracked files.
-func (s *Store) GetTotalSize() (int64, error) {
-	query := `SELECT COALESCE(SUM(size), 0) FROM files`
-	var size int64
-	err := s.db.QueryRow(query).Scan(&size)
-	return size, err
+// MarkForRetry increments retry_count and moves the file back to PENDING for re-claim.
+// If retry_count >= max_retries, the file is marked as FAILED instead.
+func (s *Store) MarkForRetry(path string, lastErr string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var retryCount, maxRetries int
+	err = tx.QueryRow("SELECT retry_count, max_retries FROM files WHERE path = ?", path).Scan(&retryCount, &maxRetries)
+	if err != nil {
+		return err
+	}
+
+	newRetryCount := retryCount + 1
+	if newRetryCount >= maxRetries {
+		_, err = tx.Exec(
+			`UPDATE files SET status = ?, retry_count = ?, last_error = ? WHERE path = ?`,
+			StatusFailed, newRetryCount, lastErr, path,
+		)
+	} else {
+		_, err = tx.Exec(
+			`UPDATE files SET status = ?, retry_count = ?, last_error = ? WHERE path = ?`,
+			StatusPending, newRetryCount, lastErr, path,
+		)
+	}
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
-// GetOldestPendingFiles returns a list of files that are PENDING to be uploaded.
-// Files are returned in order of Modification Time (oldest first).
-func (s *Store) GetOldestPendingFiles(limit int) ([]FileRecord, error) {
+// MarkFailed sets a file's status to FAILED permanently.
+func (s *Store) MarkFailed(path string, lastErr string) error {
+	_, err := s.db.Exec(
+		`UPDATE files SET status = ?, last_error = ? WHERE path = ?`,
+		StatusFailed, lastErr, path,
+	)
+	return err
+}
+
+// ClaimPendingFiles atomically claims files for processing.
+// It updates matching rows to PROCESSING and returns the claimed records.
+// Only files with status IN (PENDING, ORPHAN) and retry_count < max_retries are eligible.
+func (s *Store) ClaimPendingFiles(limit int) ([]FileRecord, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	// Atomically mark rows as PROCESSING and return them via RETURNING
 	query := `
-	SELECT id, path, size, mod_time, status, uploaded_at, partner_path
+	UPDATE files
+	SET status = ?
+	WHERE id IN (
+		SELECT id FROM files
+		WHERE status IN (?, ?)
+			AND retry_count < max_retries
+		ORDER BY mod_time ASC
+		LIMIT ?
+	)
+	RETURNING id, path, size, mod_time, status, retry_count, max_retries, last_error, uploaded_at, partner_path
+	`
+	rows, err := tx.Query(query, StatusProcessing, StatusPending, StatusOrphan, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []FileRecord
+	for rows.Next() {
+		var f FileRecord
+		err := rows.Scan(&f.ID, &f.Path, &f.Size, &f.ModTime, &f.Status, &f.RetryCount, &f.MaxRetries, &f.LastError, &f.UploadedAt, &f.PartnerPath)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, f)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if len(files) == 0 {
+		return nil, nil
+	}
+
+	return files, tx.Commit()
+}
+
+// ResetStaleProcessingFiles resets any files stuck in PROCESSING back to PENDING.
+// Should be called once on daemon startup to recover from crashes.
+func (s *Store) ResetStaleProcessingFiles() error {
+	res, err := s.db.Exec(
+		`UPDATE files SET status = ?, retry_count = 0, last_error = NULL WHERE status = ?`,
+		StatusPending, StatusProcessing,
+	)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n > 0 {
+		// Logging is done by the caller
+	}
+	return nil
+}
+
+// GetPendingFilesNoClaim returns pending/unclaimed files without changing their state.
+// Used by the pruner as a last-resort safety valve when quota is exceeded.
+func (s *Store) GetPendingFilesNoClaim(limit int) ([]FileRecord, error) {
+	query := `
+	SELECT id, path, size, mod_time, status, retry_count, max_retries, last_error, uploaded_at, partner_path
 	FROM files
 	WHERE status = ?
 	ORDER BY mod_time ASC
@@ -301,24 +422,69 @@ func (s *Store) GetOldestPendingFiles(limit int) ([]FileRecord, error) {
 	}
 	defer rows.Close()
 
-	var candidates []FileRecord
+	var files []FileRecord
 	for rows.Next() {
 		var f FileRecord
-		err := rows.Scan(&f.ID, &f.Path, &f.Size, &f.ModTime, &f.Status, &f.UploadedAt, &f.PartnerPath)
+		err := rows.Scan(&f.ID, &f.Path, &f.Size, &f.ModTime, &f.Status, &f.RetryCount, &f.MaxRetries, &f.LastError, &f.UploadedAt, &f.PartnerPath)
 		if err != nil {
 			return nil, err
 		}
-		candidates = append(candidates, f)
+		files = append(files, f)
 	}
+	return files, nil
+}
 
-	return candidates, nil
+// GetTTLPruneCandidates returns completed files (UPLOADED or FAILED) with mod_time
+// older than the given cutoff. Ordered by mod_time ASC for oldest-first eviction.
+func (s *Store) GetTTLPruneCandidates(limit int, cutoff time.Time) ([]FileRecord, error) {
+	query := `
+	SELECT id, path, size, mod_time, status, retry_count, max_retries, last_error, uploaded_at, partner_path
+	FROM files
+	WHERE status IN (?, ?) AND mod_time < ?
+	ORDER BY mod_time ASC
+	LIMIT ?
+	`
+	rows, err := s.db.Query(query, StatusUploaded, StatusFailed, cutoff, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []FileRecord
+	for rows.Next() {
+		var f FileRecord
+		err := rows.Scan(&f.ID, &f.Path, &f.Size, &f.ModTime, &f.Status, &f.RetryCount, &f.MaxRetries, &f.LastError, &f.UploadedAt, &f.PartnerPath)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, f)
+	}
+	return files, nil
+}
+
+// IncrementalVacuum releases a small number of freelist pages back to the OS.
+// Only effective when auto_vacuum is set to INCREMENTAL.
+func (s *Store) IncrementalVacuum(pages int) error {
+	if pages < 1 {
+		pages = 1
+	}
+	_, err := s.db.Exec("PRAGMA incremental_vacuum(" + fmt.Sprintf("%d", pages) + ");")
+	return err
+}
+
+// GetTotalSize returns the sum of the size of all tracked files.
+func (s *Store) GetTotalSize() (int64, error) {
+	query := `SELECT COALESCE(SUM(size), 0) FROM files`
+	var size int64
+	err := s.db.QueryRow(query).Scan(&size)
+	return size, err
 }
 
 // GetPruneCandidates returns a list of files that are safe to delete (Status=UPLOADED).
 // Files are returned in order of Modification Time (oldest first).
 func (s *Store) GetPruneCandidates(limit int) ([]FileRecord, error) {
 	query := `
-	SELECT id, path, size, mod_time, status, uploaded_at, partner_path
+	SELECT id, path, size, mod_time, status, retry_count, max_retries, last_error, uploaded_at, partner_path
 	FROM files
 	WHERE status = ?
 	ORDER BY mod_time ASC
@@ -333,7 +499,7 @@ func (s *Store) GetPruneCandidates(limit int) ([]FileRecord, error) {
 	var candidates []FileRecord
 	for rows.Next() {
 		var f FileRecord
-		err := rows.Scan(&f.ID, &f.Path, &f.Size, &f.ModTime, &f.Status, &f.UploadedAt, &f.PartnerPath)
+		err := rows.Scan(&f.ID, &f.Path, &f.Size, &f.ModTime, &f.Status, &f.RetryCount, &f.MaxRetries, &f.LastError, &f.UploadedAt, &f.PartnerPath)
 		if err != nil {
 			return nil, err
 		}
@@ -365,32 +531,4 @@ func (s *Store) RemoveFile(path string) error {
 	}
 
 	return tx.Commit()
-}
-
-// GetPendingFiles returns a list of files waiting to be uploaded.
-// This now includes both PENDING (paired) and ORPHAN files.
-func (s *Store) GetPendingFiles(limit int) ([]FileRecord, error) {
-	query := `
-	SELECT id, path, size, mod_time, status, uploaded_at, partner_path
-	FROM files
-	WHERE status IN (?, ?)
-	ORDER BY mod_time ASC
-	LIMIT ?
-	`
-	rows, err := s.db.Query(query, StatusPending, StatusOrphan, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var files []FileRecord
-	for rows.Next() {
-		var f FileRecord
-		err := rows.Scan(&f.ID, &f.Path, &f.Size, &f.ModTime, &f.Status, &f.UploadedAt, &f.PartnerPath)
-		if err != nil {
-			return nil, err
-		}
-		files = append(files, f)
-	}
-	return files, nil
 }

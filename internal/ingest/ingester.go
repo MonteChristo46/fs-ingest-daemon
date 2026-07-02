@@ -15,14 +15,12 @@ import (
 
 // Ingester manages the file ingestion pipeline.
 type Ingester struct {
-	cfg            *config.Config // App configuration
-	store          *store.Store   // Local metadata database
-	uploader       *Uploader      // Worker that handles actual upload logic
-	logger         *slog.Logger   // Structured logger
-	stop           chan struct{}  // Channel to signal shutdown
+	cfg            *config.Config
+	store          *store.Store
+	uploader       *Uploader
+	logger         *slog.Logger
+	stop           chan struct{}
 	jobs           chan store.FileRecord
-	pending        map[string]struct{}
-	pendingMu      sync.Mutex
 	wg             sync.WaitGroup
 	statsMu        sync.Mutex
 	ingestedCount  int
@@ -44,7 +42,6 @@ func NewIngester(cfg *config.Config, s *store.Store, logger *slog.Logger) *Inges
 		logger:         logger,
 		stop:           make(chan struct{}),
 		jobs:           make(chan store.FileRecord, cfg.IngestBatchSize),
-		pending:        make(map[string]struct{}),
 		currentBackoff: 10 * time.Second,
 	}
 }
@@ -89,6 +86,12 @@ func (i *Ingester) Start() {
 	i.wg.Add(1)
 	go func() {
 		defer i.wg.Done()
+		i.quotaProbe()
+	}()
+
+	i.wg.Add(1)
+	go func() {
+		defer i.wg.Done()
 		// Heartbeat loop
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
@@ -119,7 +122,7 @@ func (i *Ingester) Stop() {
 	i.wg.Wait()
 }
 
-// processBatch fetches a batch of PENDING files from the store and triggers their upload.
+// processBatch atomically claims a batch of files from the store and dispatches them to workers.
 func (i *Ingester) processBatch() {
 	i.backoffMu.Lock()
 	if !i.nextRetryTime.IsZero() && time.Now().Before(i.nextRetryTime) {
@@ -128,31 +131,19 @@ func (i *Ingester) processBatch() {
 	}
 	i.backoffMu.Unlock()
 
-	// Fetch pending files based on batch size config
-	files, err := i.store.GetPendingFiles(i.cfg.IngestBatchSize)
+	files, err := i.store.ClaimPendingFiles(i.cfg.IngestBatchSize)
 	if err != nil {
-		i.logger.Error("Ingester: Error fetching pending files", "error", err)
+		i.logger.Error("Ingester: Error claiming files", "error", err)
 		return
 	}
 
 	for _, f := range files {
-		i.pendingMu.Lock()
-		if _, exists := i.pending[f.Path]; exists {
-			i.pendingMu.Unlock()
-			continue
-		}
-		i.pending[f.Path] = struct{}{}
-		i.pendingMu.Unlock()
-
 		select {
 		case i.jobs <- f:
-			// successfully queued
 		default:
-			// Channel full, release pending lock and skip
-			i.pendingMu.Lock()
-			delete(i.pending, f.Path)
-			i.pendingMu.Unlock()
-			i.logger.Warn("Ingest job queue full, processed in next polling cycle ", "path", f.Path)
+			// Channel full, release this file back to PENDING so it can be claimed later
+			_ = i.store.MarkForRetry(f.Path, "worker queue full")
+			i.logger.Warn("Ingest job queue full, releasing file", "path", f.Path)
 		}
 	}
 }
@@ -187,9 +178,58 @@ func (i *Ingester) worker() {
 			}
 			i.backoffMu.Unlock()
 		}
+	}
+}
 
-		i.pendingMu.Lock()
-		delete(i.pending, f.Path)
-		i.pendingMu.Unlock()
+// quotaProbe periodically checks if quota has been restored during a backoff period.
+// It runs independently of the backoff gate, claiming and processing a single file
+// each interval. If the upload succeeds, the backoff is immediately reset so bulk
+// processing can resume without waiting for the backoff timer to expire.
+func (i *Ingester) quotaProbe() {
+	interval, err := time.ParseDuration(i.cfg.QuotaCheckInterval)
+	if err != nil {
+		interval = 30 * time.Second
+		i.logger.Error("Invalid quota check interval, defaulting to 30s", "error", err)
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if !i.store.IsQuotaExceeded() {
+				continue
+			}
+
+			i.backoffMu.Lock()
+			backoffActive := !i.nextRetryTime.IsZero() && time.Now().Before(i.nextRetryTime)
+			i.backoffMu.Unlock()
+
+			if !backoffActive {
+				continue
+			}
+
+			files, err := i.store.ClaimPendingFiles(1)
+			if err != nil {
+				i.logger.Error("Quota probe: Error claiming file", "error", err)
+				continue
+			}
+			if len(files) == 0 {
+				continue
+			}
+
+			result, _ := i.uploader.Process(files[0])
+
+			if result == ResultSuccess {
+				i.logger.Info("Quota probe: Upload successful, quota appears restored. Resetting backoff.")
+				i.backoffMu.Lock()
+				i.currentBackoff = 10 * time.Second
+				i.nextRetryTime = time.Time{}
+				i.backoffMu.Unlock()
+			}
+
+		case <-i.stop:
+			return
+		}
 	}
 }

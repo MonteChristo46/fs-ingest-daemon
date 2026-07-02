@@ -44,7 +44,7 @@ func TestRemoveFileUnlinksPartner(t *testing.T) {
 	}
 
 	// Verify they are paired
-	files, err := s.GetPendingFiles(10)
+	files, err := s.GetPendingFilesNoClaim(10)
 	if err != nil {
 		t.Fatalf("Failed to get pending files: %v", err)
 	}
@@ -66,8 +66,7 @@ func TestRemoveFileUnlinksPartner(t *testing.T) {
 	}
 
 	// Verify Image is gone
-	// We can check by listing pending files again
-	filesAfter, err := s.GetPendingFiles(10)
+	filesAfter, err := s.GetPendingFilesNoClaim(10)
 	if err != nil {
 		t.Fatalf("Failed to get pending files after removal: %v", err)
 	}

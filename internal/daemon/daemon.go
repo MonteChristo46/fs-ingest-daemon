@@ -70,7 +70,14 @@ func (d *Daemon) Start(s service.Service) error {
 	d.PrunerSvc = pruner.NewPruner(d.Cfg, d.DbStore, d.Logger)
 	d.PrunerSvc.Start()
 
-	// 5. Start Ingester
+	// 5. Recover any files stuck in PROCESSING from a previous crash
+	if err := d.DbStore.ResetStaleProcessingFiles(); err != nil {
+		d.Logger.Warn("Failed to reset stale PROCESSING files", "error", err)
+	} else {
+		d.Logger.Info("Recovered stale PROCESSING files to PENDING")
+	}
+
+	// 6. Start Ingester
 	d.IngesterSvc = ingest.NewIngester(d.Cfg, d.DbStore, d.Logger)
 	d.IngesterSvc.Start()
 

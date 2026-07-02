@@ -177,6 +177,94 @@ func createFile(t *testing.T, path string, size int64) {
 	}
 }
 
+func TestPruner_TTL_PruneOlderFiles(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "pruner_ttl_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "test.db")
+	s, err := store.NewStore(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	cfg := &config.Config{
+		TTLMaxAge:         "1h",
+		TTLPruneBatchSize: 100,
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	p := NewPruner(cfg, s, logger)
+
+	// Old file (2 hours ago) — should be pruned
+	oldFile := filepath.Join(tmpDir, "old.dat")
+	createFile(t, oldFile, 100)
+	s.RegisterFile(oldFile, 100, time.Now().Add(-2*time.Hour), false, true)
+	s.MarkUploaded(oldFile)
+
+	// Recent file (30 min ago) — should survive
+	recentFile := filepath.Join(tmpDir, "recent.dat")
+	createFile(t, recentFile, 100)
+	s.RegisterFile(recentFile, 100, time.Now().Add(-30*time.Minute), false, true)
+	s.MarkUploaded(recentFile)
+
+	p.PruneTTL()
+
+	if exists(oldFile) {
+		t.Error("Old uploaded file was NOT pruned by TTL")
+	}
+	if !exists(recentFile) {
+		t.Error("Recent uploaded file was pruned by TTL")
+	}
+}
+
+func TestPruner_TTL_PruneFailedFiles(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "pruner_ttl_failed_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "test.db")
+	s, err := store.NewStore(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	cfg := &config.Config{
+		TTLMaxAge:         "1h",
+		TTLPruneBatchSize: 100,
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	p := NewPruner(cfg, s, logger)
+
+	// Old failed file (2 hours ago) — should be pruned
+	oldFile := filepath.Join(tmpDir, "old_failed.dat")
+	createFile(t, oldFile, 100)
+	s.RegisterFile(oldFile, 100, time.Now().Add(-2*time.Hour), false, true)
+	s.MarkFailed(oldFile, "test error")
+
+	// Recent failed file (30 min ago) — should survive
+	recentFile := filepath.Join(tmpDir, "recent_failed.dat")
+	createFile(t, recentFile, 100)
+	s.RegisterFile(recentFile, 100, time.Now().Add(-30*time.Minute), false, true)
+	s.MarkFailed(recentFile, "test error")
+
+	p.PruneTTL()
+
+	if exists(oldFile) {
+		t.Error("Old FAILED file was NOT pruned by TTL")
+	}
+	if !exists(recentFile) {
+		t.Error("Recent FAILED file was pruned by TTL")
+	}
+}
+
 func exists(path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)

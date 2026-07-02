@@ -126,6 +126,7 @@ func (u *Uploader) Process(f store.FileRecord) (UploadResult, time.Duration) {
 			return ResultSkipped, 0
 		}
 		u.logger.Error("Ingester: Failed to calculate checksum", "path", f.Path, "error", res.err)
+		_ = u.store.MarkForRetry(f.Path, res.err.Error())
 		return ResultError, 0
 	}
 	req.SHA256Checksum = res.sum
@@ -136,10 +137,12 @@ func (u *Uploader) Process(f store.FileRecord) (UploadResult, time.Duration) {
 			if apiErr.StatusCode == http.StatusPaymentRequired || apiErr.StatusCode == http.StatusForbidden {
 				u.logger.Warn("Ingester: Quota exceeded or forbidden", "path", f.Path, "status", apiErr.StatusCode, "message", apiErr.Message)
 				u.store.SetQuotaExceeded(true)
+				_ = u.store.MarkForRetry(f.Path, apiErr.Message)
 				return ResultQuotaExceeded, 0
 			}
 		}
 		u.logger.Error("Ingester: Ingest request failed", "path", f.Path, "error", err)
+		_ = u.store.MarkForRetry(f.Path, err.Error())
 		return ResultError, 0
 	}
 
@@ -158,6 +161,7 @@ func (u *Uploader) Process(f store.FileRecord) (UploadResult, time.Duration) {
 			ErrorMessage: &errMsg,
 		}
 		_ = u.apiClient.Confirm(failReq)
+		_ = u.store.MarkForRetry(f.Path, errMsg)
 		return ResultError, 0
 	}
 	uploadDuration := time.Since(uploadStart)
@@ -179,8 +183,8 @@ func (u *Uploader) Process(f store.FileRecord) (UploadResult, time.Duration) {
 
 	if err := u.apiClient.Confirm(confirmReq); err != nil {
 		u.logger.Error("Ingester: Confirm request failed", "path", f.Path, "handshake_id", resp.HandshakeID, "error", err)
-		// Note: If confirm fails, we do NOT mark as uploaded locally.
-		// This ensures the file is retried in the next batch.
+		// Put back to PENDING so the file is retried
+		_ = u.store.MarkForRetry(f.Path, err.Error())
 		return ResultError, 0
 	}
 

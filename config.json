@@ -31,5 +31,6 @@
   ],
   "image_compression_enabled": true,
   "image_max_dimension_px": 400,
-  "image_compression_quality": 80
+  "image_compression_quality": 80,
+  "quota_check_interval": "30s"
 }

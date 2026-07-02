@@ -30,8 +30,9 @@ func NewPruner(cfg *config.Config, s *store.Store, logger *slog.Logger) *Pruner 
 	}
 }
 
-// Start runs the pruning logic in a background goroutine, checking based on config interval.
+// Start runs the pruning logic in background goroutines, checking based on config intervals.
 func (p *Pruner) Start() {
+	// --- Watermark Pruner ---
 	interval, err := time.ParseDuration(p.cfg.PruneCheckInterval)
 	if err != nil {
 		interval = 1 * time.Minute
@@ -50,6 +51,27 @@ func (p *Pruner) Start() {
 			}
 		}
 	}()
+
+	// --- TTL Pruner ---
+	if p.cfg.TTLEnabled {
+		ttlInterval, err := time.ParseDuration(p.cfg.TTLPruneInterval)
+		if err != nil {
+			ttlInterval = 1 * time.Hour
+			p.logger.Error("Invalid TTL prune interval, defaulting to 1h", "error", err)
+		}
+		ttlTicker := time.NewTicker(ttlInterval)
+		go func() {
+			for {
+				select {
+				case <-ttlTicker.C:
+					p.PruneTTL()
+				case <-p.stop:
+					ttlTicker.Stop()
+					return
+				}
+			}
+		}()
+	}
 }
 
 // Stop signals the background goroutine to stop.
@@ -108,7 +130,7 @@ func (p *Pruner) Prune() {
 		if len(candidates) == 0 {
 			if p.store.IsQuotaExceeded() {
 				p.logger.Warn("Pruner: Quota exceeded and disk full. Deleting oldest PENDING files to make room for new data.")
-				candidates, err = p.store.GetOldestPendingFiles(p.cfg.PruneBatchSize)
+				candidates, err = p.store.GetPendingFilesNoClaim(p.cfg.PruneBatchSize)
 				if err != nil {
 					p.logger.Error("Pruner: Error fetching pending candidates", "error", err)
 					return
@@ -155,4 +177,53 @@ func (p *Pruner) Prune() {
 	}
 
 	p.logger.Info("Pruner: Eviction cycle complete", "final_size", currentSize)
+}
+
+// PruneTTL evicts completed files (UPLOADED or FAILED) whose mod_time exceeds the TTL max age.
+// It runs on a slow ticker to enforce retention policy and prevent database bloat.
+func (p *Pruner) PruneTTL() {
+	maxAge, err := time.ParseDuration(p.cfg.TTLMaxAge)
+	if err != nil {
+		p.logger.Error("Invalid TTL max age, defaulting to 1h", "error", err)
+		maxAge = 1 * time.Hour
+	}
+	cutoff := time.Now().Add(-maxAge)
+
+	candidates, err := p.store.GetTTLPruneCandidates(p.cfg.TTLPruneBatchSize, cutoff)
+	if err != nil {
+		p.logger.Error("TTL Pruner: Error fetching candidates", "error", err)
+		return
+	}
+
+	if len(candidates) == 0 {
+		return
+	}
+
+	deletedCount := 0
+	for _, f := range candidates {
+		err := os.Remove(f.Path)
+		if err != nil && !os.IsNotExist(err) {
+			p.logger.Error("TTL Pruner: Failed to remove file", "path", f.Path, "error", err)
+			continue
+		}
+		if err := p.store.RemoveFile(f.Path); err != nil {
+			p.logger.Error("TTL Pruner: Failed to remove DB record", "path", f.Path, "error", err)
+		} else {
+			deletedCount++
+		}
+	}
+
+	// Release a small number of DB pages back to the OS
+	pageReclaim := deletedCount / 50
+	if pageReclaim < 1 {
+		pageReclaim = 1
+	}
+	if pageReclaim > 50 {
+		pageReclaim = 50
+	}
+	if err := p.store.IncrementalVacuum(pageReclaim); err != nil {
+		p.logger.Error("TTL Pruner: Incremental vacuum failed", "error", err)
+	}
+
+	p.logger.Info("TTL Pruner: Cycle complete", "deleted", deletedCount, "cutoff", cutoff)
 }

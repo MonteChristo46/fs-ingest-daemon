@@ -81,7 +81,7 @@ func TestDaemonInitialScan(t *testing.T) {
 	// We can inspect d.DbStore directly
 
 	var pending []store.FileRecord
-	pending, err = d.DbStore.GetPendingFiles(100)
+	pending, err = d.DbStore.GetPendingFilesNoClaim(100)
 	if err != nil {
 		t.Fatalf("Failed to get pending files: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestDaemonNoSidecarStrategy(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// 5. Verify file is PENDING
-	pending, err := d.DbStore.GetPendingFiles(100)
+	pending, err := d.DbStore.GetPendingFilesNoClaim(100)
 	if err != nil {
 		t.Fatalf("Failed to get pending files: %v", err)
 	}
