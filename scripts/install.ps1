@@ -1,7 +1,7 @@
 # Requires RunAsAdministrator
 $ErrorActionPreference = "Stop"
 
-$VERSION="0.9.0-alpha"
+$VERSION="0.9.2-alpha"
 
 $ESC = [char]27
 
