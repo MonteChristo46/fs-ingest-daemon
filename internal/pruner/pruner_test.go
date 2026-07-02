@@ -1,6 +1,7 @@
 package pruner
 
 import (
+	"fmt"
 	"fs-ingest-daemon/internal/config"
 	"fs-ingest-daemon/internal/store"
 	"log/slog"
@@ -20,7 +21,7 @@ func TestPruner_Eviction(t *testing.T) {
 
 	// Setup DB
 	dbPath := filepath.Join(tmpDir, "test.db")
-	s, err := store.NewStore(dbPath)
+	s, err := store.NewStore(dbPath, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,14 +44,14 @@ func TestPruner_Eviction(t *testing.T) {
 	oldFile := filepath.Join(tmpDir, "old_uploaded.dat")
 	createFile(t, oldFile, 1024)
 	// Manually inject into DB to set specific mod time
-	s.RegisterFile(oldFile, 1024, time.Now().Add(-2*time.Hour), false, true)
+	s.RegisterFile(oldFile, 1024, time.Now().Add(-2*time.Hour), false, true, "h_old_evict", "old_uploaded.dat")
 	s.MarkUploaded(oldFile)
 
 	// 2. New Uploaded File (Target for eviction ONLY if space still needed)
 	// Created 1 hour ago, Uploaded.
 	newFile := filepath.Join(tmpDir, "new_uploaded.dat")
 	createFile(t, newFile, 1024)
-	s.RegisterFile(newFile, 1024, time.Now().Add(-1*time.Hour), false, true)
+	s.RegisterFile(newFile, 1024, time.Now().Add(-1*time.Hour), false, true, "h_new_evict", "new_uploaded.dat")
 	s.MarkUploaded(newFile)
 
 	// 3. Pending File (Protected)
@@ -58,7 +59,7 @@ func TestPruner_Eviction(t *testing.T) {
 	// This proves that Status > ModTime for safety.
 	pendingFile := filepath.Join(tmpDir, "pending.dat")
 	createFile(t, pendingFile, 1024)
-	s.RegisterFile(pendingFile, 1024, time.Now().Add(-3*time.Hour), false, true)
+	s.RegisterFile(pendingFile, 1024, time.Now().Add(-3*time.Hour), false, true, "h_pending_evict", "pending.dat")
 	// Status remains PENDING/AWAITING
 
 	// --- Execution ---
@@ -102,7 +103,7 @@ func TestPruner_Eviction_Hysteresis(t *testing.T) {
 
 	// Setup DB
 	dbPath := filepath.Join(tmpDir, "test.db")
-	s, err := store.NewStore(dbPath)
+	s, err := store.NewStore(dbPath, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +129,7 @@ func TestPruner_Eviction_Hysteresis(t *testing.T) {
 		path := filepath.Join(tmpDir, name)
 		createFile(t, path, 20)
 		// Register with increasing mod times (f1=oldest)
-		s.RegisterFile(path, 20, time.Now().Add(time.Duration(-len(files)+i)*time.Minute), false, true)
+		s.RegisterFile(path, 20, time.Now().Add(time.Duration(-len(files)+i)*time.Minute), false, true, fmt.Sprintf("h_hysteresis_%s", name), name)
 		s.MarkUploaded(path)
 	}
 
@@ -185,7 +186,7 @@ func TestPruner_TTL_PruneOlderFiles(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	dbPath := filepath.Join(tmpDir, "test.db")
-	s, err := store.NewStore(dbPath)
+	s, err := store.NewStore(dbPath, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,13 +203,13 @@ func TestPruner_TTL_PruneOlderFiles(t *testing.T) {
 	// Old file (2 hours ago) — should be pruned
 	oldFile := filepath.Join(tmpDir, "old.dat")
 	createFile(t, oldFile, 100)
-	s.RegisterFile(oldFile, 100, time.Now().Add(-2*time.Hour), false, true)
+	s.RegisterFile(oldFile, 100, time.Now().Add(-2*time.Hour), false, true, "h_ttl_old", "old.dat")
 	s.MarkUploaded(oldFile)
 
 	// Recent file (30 min ago) — should survive
 	recentFile := filepath.Join(tmpDir, "recent.dat")
 	createFile(t, recentFile, 100)
-	s.RegisterFile(recentFile, 100, time.Now().Add(-30*time.Minute), false, true)
+	s.RegisterFile(recentFile, 100, time.Now().Add(-30*time.Minute), false, true, "h_ttl_recent", "recent.dat")
 	s.MarkUploaded(recentFile)
 
 	p.PruneTTL()
@@ -229,7 +230,7 @@ func TestPruner_TTL_PruneFailedFiles(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	dbPath := filepath.Join(tmpDir, "test.db")
-	s, err := store.NewStore(dbPath)
+	s, err := store.NewStore(dbPath, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,13 +247,13 @@ func TestPruner_TTL_PruneFailedFiles(t *testing.T) {
 	// Old failed file (2 hours ago) — should be pruned
 	oldFile := filepath.Join(tmpDir, "old_failed.dat")
 	createFile(t, oldFile, 100)
-	s.RegisterFile(oldFile, 100, time.Now().Add(-2*time.Hour), false, true)
+	s.RegisterFile(oldFile, 100, time.Now().Add(-2*time.Hour), false, true, "h_ttl_fail_old", "old_failed.dat")
 	s.MarkFailed(oldFile, "test error")
 
 	// Recent failed file (30 min ago) — should survive
 	recentFile := filepath.Join(tmpDir, "recent_failed.dat")
 	createFile(t, recentFile, 100)
-	s.RegisterFile(recentFile, 100, time.Now().Add(-30*time.Minute), false, true)
+	s.RegisterFile(recentFile, 100, time.Now().Add(-30*time.Minute), false, true, "h_ttl_fail_recent", "recent_failed.dat")
 	s.MarkFailed(recentFile, "test error")
 
 	p.PruneTTL()

@@ -107,9 +107,13 @@ func (u *Uploader) Process(f store.FileRecord) (UploadResult, time.Duration) {
 	}
 
 	// 3. Ingest Request - Ask API for permission and upload URL
+	filename := f.OriginalFilename.String
+	if filename == "" {
+		filename = filepath.Base(f.Path)
+	}
 	req := api.IngestRequest{
 		DeviceID:        u.cfg.DeviceID,
-		Filename:        filepath.Base(f.Path),
+		Filename:        filename,
 		FileSizeBytes:   f.Size,
 		FilePathContext: context,
 		DeviceContext:   deviceContext,

@@ -47,6 +47,8 @@ type Config struct {
 	ImageMaxDimensionPx       int      `json:"image_max_dimension_px"`       // Max dimension (width or height) in pixels.
 	ImageCompressionQuality   int      `json:"image_compression_quality"`    // JPEG compression quality (1-100).
 	QuotaCheckInterval        string   `json:"quota_check_interval"`         // Duration string (e.g. "30s") for quota check probing.
+	QueueCapacity             int      `json:"queue_capacity"`               // Size of the buffered job channel (max inflight jobs).
+	DefaultMaxRetries         int      `json:"default_max_retries"`          // Default max retries per file before marking FAILED.
 }
 
 var (
@@ -79,6 +81,8 @@ var (
 	DefaultTTLPruneBatchSize         = 100
 	DefaultTTLEnabled                = true
 	DefaultQuotaCheckInterval        = "30s"
+	DefaultQueueCapacity             = 10
+	DefaultMaxRetries                = 3
 )
 
 // Load reads the configuration from the specified path.
@@ -120,6 +124,8 @@ func Load(path string) (*Config, error) {
 		TTLPruneBatchSize:         DefaultTTLPruneBatchSize,
 		TTLEnabled:                DefaultTTLEnabled,
 		QuotaCheckInterval:        DefaultQuotaCheckInterval,
+		QueueCapacity:             DefaultQueueCapacity,
+		DefaultMaxRetries:         DefaultMaxRetries,
 	}
 
 	f, err := os.Open(path)

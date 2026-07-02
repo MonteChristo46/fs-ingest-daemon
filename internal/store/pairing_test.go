@@ -16,7 +16,7 @@ func TestPairingDoubleExtension(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	dbPath := filepath.Join(tmpDir, "test.db")
-	s, err := NewStore(dbPath)
+	s, err := NewStore(dbPath, 3)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
@@ -28,14 +28,14 @@ func TestPairingDoubleExtension(t *testing.T) {
 	size := int64(100)
 
 	// 1. Image Arrives First
-	if err := s.RegisterFile(imagePath, size, modTime, false, true); err != nil {
+	if err := s.RegisterFile(imagePath, size, modTime, false, true, "h_img_de", "img.png"); err != nil {
 		t.Fatalf("Failed to register image: %v", err)
 	}
 	// Check Image is waiting
 	verifyStatus(t, s, imagePath, StatusAwaitingPartner)
 
 	// 2. JSON Arrives
-	if err := s.RegisterFile(jsonPath, size, modTime, true, true); err != nil {
+	if err := s.RegisterFile(jsonPath, size, modTime, true, true, "h_json_de", "img.png.json"); err != nil {
 		t.Fatalf("Failed to register json: %v", err)
 	}
 
@@ -53,7 +53,7 @@ func TestPairingSingleExtension(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	dbPath := filepath.Join(tmpDir, "test.db")
-	s, err := NewStore(dbPath)
+	s, err := NewStore(dbPath, 3)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestPairingSingleExtension(t *testing.T) {
 	size := int64(100)
 
 	// 1. Image Arrives First
-	if err := s.RegisterFile(imagePath, size, modTime, false, true); err != nil {
+	if err := s.RegisterFile(imagePath, size, modTime, false, true, "h_img_se", "img_single.png"); err != nil {
 		t.Fatalf("Failed to register image: %v", err)
 	}
 	// Check Image is waiting
@@ -73,7 +73,7 @@ func TestPairingSingleExtension(t *testing.T) {
 	verifyStatus(t, s, imagePath, StatusAwaitingPartner)
 
 	// 2. JSON Arrives
-	if err := s.RegisterFile(jsonPath, size, modTime, true, true); err != nil {
+	if err := s.RegisterFile(jsonPath, size, modTime, true, true, "h_json_se", "img_single.json"); err != nil {
 		t.Fatalf("Failed to register json: %v", err)
 	}
 
@@ -91,7 +91,7 @@ func TestPairingSingleExtension_MetaFirst(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	dbPath := filepath.Join(tmpDir, "test.db")
-	s, err := NewStore(dbPath)
+	s, err := NewStore(dbPath, 3)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
@@ -103,14 +103,14 @@ func TestPairingSingleExtension_MetaFirst(t *testing.T) {
 	size := int64(100)
 
 	// 1. JSON Arrives First
-	if err := s.RegisterFile(jsonPath, size, modTime, true, true); err != nil {
+	if err := s.RegisterFile(jsonPath, size, modTime, true, true, "h_json_smf", "img_single_mf.json"); err != nil {
 		t.Fatalf("Failed to register json: %v", err)
 	}
 	// Check JSON is waiting
 	verifyStatus(t, s, jsonPath, StatusAwaitingPartner)
 
 	// 2. Image Arrives
-	if err := s.RegisterFile(imagePath, size, modTime, false, true); err != nil {
+	if err := s.RegisterFile(imagePath, size, modTime, false, true, "h_img_smf", "img_single_mf.png"); err != nil {
 		t.Fatalf("Failed to register image: %v", err)
 	}
 

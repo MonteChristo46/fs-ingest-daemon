@@ -1,7 +1,10 @@
 package daemon
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -58,7 +61,7 @@ func (d *Daemon) Start(s service.Service) error {
 	}
 
 	// 2. Initialize Store using configured DB Path
-	d.DbStore, err = store.NewStore(d.Cfg.DBPath)
+	d.DbStore, err = store.NewStore(d.Cfg.DBPath, d.Cfg.DefaultMaxRetries)
 	if err != nil {
 		return fmt.Errorf("failed to init store at %s: %v", d.Cfg.DBPath, err)
 	}
@@ -193,7 +196,7 @@ func (d *Daemon) orphanChecker() {
 	}
 }
 
-// processFile handles a detected file by adding it to the store.
+// processFile handles a detected file by computing a unique hash and adding it to the store.
 func (d *Daemon) processFile(path string) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -217,7 +220,6 @@ func (d *Daemon) processFile(path string) {
 	}
 
 	if !allowed {
-		// Log specific error for debugging but don't error out loudly as it's common to have other files
 		if d.Logger != nil {
 			d.Logger.Debug("Skipping file with disallowed extension", "path", path, "ext", ext)
 		}
@@ -232,13 +234,39 @@ func (d *Daemon) processFile(path string) {
 		expectSidecar = false
 	}
 
-	if err := d.DbStore.RegisterFile(path, info.Size(), info.ModTime(), isMeta, expectSidecar); err != nil {
+	// Compute a unique file hash: SHA256(content + nanosecond timestamp).
+	// This ensures that even files with identical names and content are
+	// registered as distinct entries when they arrive at different times.
+	f, err := os.Open(path)
+	if err != nil {
+		if d.Logger != nil {
+			d.Logger.Error("failed to open file for hashing", "path", path, "error", err)
+		}
+		return
+	}
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		f.Close()
+		if d.Logger != nil {
+			d.Logger.Error("failed to hash file", "path", path, "error", err)
+		}
+		return
+	}
+	f.Close()
+
+	// Incorporate a timestamp to guarantee uniqueness across arrivals.
+	h.Write([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
+	fileHash := hex.EncodeToString(h.Sum(nil))
+	originalFilename := filepath.Base(path)
+
+	if err := d.DbStore.RegisterFile(path, info.Size(), info.ModTime(), isMeta, expectSidecar, fileHash, originalFilename); err != nil {
 		if d.Logger != nil {
 			d.Logger.Error("db error", "error", err)
 		}
 	} else {
 		if d.Logger != nil {
-			d.Logger.Debug("Detected", "path", path)
+			d.Logger.Debug("Detected", "path", path, "hash", fileHash)
 		}
 	}
 }

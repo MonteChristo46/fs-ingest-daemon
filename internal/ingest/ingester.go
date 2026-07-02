@@ -41,7 +41,7 @@ func NewIngester(cfg *config.Config, s *store.Store, logger *slog.Logger) *Inges
 		uploader:       uploader,
 		logger:         logger,
 		stop:           make(chan struct{}),
-		jobs:           make(chan store.FileRecord, cfg.IngestBatchSize),
+		jobs:           make(chan store.FileRecord, cfg.QueueCapacity),
 		currentBackoff: 10 * time.Second,
 	}
 }
@@ -138,13 +138,7 @@ func (i *Ingester) processBatch() {
 	}
 
 	for _, f := range files {
-		select {
-		case i.jobs <- f:
-		default:
-			// Channel full, release this file back to PENDING so it can be claimed later
-			_ = i.store.MarkForRetry(f.Path, "worker queue full")
-			i.logger.Warn("Ingest job queue full, releasing file", "path", f.Path)
-		}
+		i.jobs <- f
 	}
 }
 

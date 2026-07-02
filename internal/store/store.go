@@ -27,26 +27,30 @@ const (
 	StatusFailed          FileStatus = "FAILED"           // Upload permanently failed after max retries
 )
 
-const defaultMaxRetries = 3
+// DefaultMaxRetriesDefault is the fallback if no value is provided.
+const DefaultMaxRetriesDefault = 3
 
 // FileRecord represents a row in the 'files' table.
 type FileRecord struct {
-	ID          int64
-	Path        string
-	Size        int64
-	ModTime     time.Time
-	Status      FileStatus
-	RetryCount  int
-	MaxRetries  int
-	LastError   sql.NullString
-	UploadedAt  sql.NullTime
-	PartnerPath sql.NullString
+	ID               int64
+	Path             string
+	FileHash         string
+	OriginalFilename sql.NullString
+	Size             int64
+	ModTime          time.Time
+	Status           FileStatus
+	RetryCount       int
+	MaxRetries       int
+	LastError        sql.NullString
+	UploadedAt       sql.NullTime
+	PartnerPath      sql.NullString
 }
 
 // Store wraps the SQL database connection.
 type Store struct {
-	db            *sql.DB
-	quotaExceeded atomic.Bool
+	db                *sql.DB
+	quotaExceeded     atomic.Bool
+	defaultMaxRetries int
 }
 
 // SetQuotaExceeded updates the quota exceeded state.
@@ -60,7 +64,7 @@ func (s *Store) IsQuotaExceeded() bool {
 }
 
 // NewStore initializes the SQLite database connection and runs migrations.
-func NewStore(dbPath string) (*Store, error) {
+func NewStore(dbPath string, defaultMaxRetries int) (*Store, error) {
 	// modernc.org/sqlite uses "sqlite" as driver name.
 	// We use a single connection to avoid "database is locked" errors with writers.
 	// SQLite handles serialization internally, but database/sql connection pool
@@ -87,7 +91,10 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, err
 	}
 
-	s := &Store{db: db}
+	if defaultMaxRetries <= 0 {
+		defaultMaxRetries = DefaultMaxRetriesDefault
+	}
+	s := &Store{db: db, defaultMaxRetries: defaultMaxRetries}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
@@ -103,6 +110,7 @@ func (s *Store) Close() error {
 
 // migrate creates the necessary tables and indexes if they don't exist.
 func (s *Store) migrate() error {
+	// Initial table creation (old schema — will be migrated below if needed)
 	query := `
 	CREATE TABLE IF NOT EXISTS files (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,11 +139,70 @@ func (s *Store) migrate() error {
 	_, _ = s.db.Exec("DROP INDEX IF EXISTS idx_status_mod_time;")
 	_, _ = s.db.Exec("CREATE INDEX IF NOT EXISTS idx_status_mod_time ON files(status, mod_time);")
 	_, _ = s.db.Exec("CREATE INDEX IF NOT EXISTS idx_partner_path ON files(partner_path);")
+
+	// Migration v0.11.0: add file_hash and original_filename columns,
+	// remove UNIQUE constraint from path, add UNIQUE on file_hash.
+	_, _ = s.db.Exec("ALTER TABLE files ADD COLUMN file_hash TEXT;")
+	_, _ = s.db.Exec("ALTER TABLE files ADD COLUMN original_filename TEXT;")
+
+	// Check if the old UNIQUE constraint on path still exists (auto-index).
+	var hasPathUnique int
+	_ = s.db.QueryRow(
+		"SELECT COUNT(*) FROM pragma_index_list('files') WHERE name = 'sqlite_autoindex_files_1'",
+	).Scan(&hasPathUnique)
+
+	if hasPathUnique > 0 {
+		// Recreate the table without UNIQUE on path and with UNIQUE on file_hash.
+		_, _ = s.db.Exec("DROP TABLE IF EXISTS files_new")
+		_, err = s.db.Exec(`
+			CREATE TABLE files_new (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				path TEXT NOT NULL,
+				file_hash TEXT NOT NULL UNIQUE,
+				original_filename TEXT,
+				size INTEGER NOT NULL,
+				mod_time DATETIME NOT NULL,
+				status TEXT NOT NULL DEFAULT 'PENDING'
+					CHECK(status IN ('PENDING','PROCESSING','UPLOADED','AWAITING_PARTNER','ORPHAN','FAILED')),
+				retry_count INTEGER NOT NULL DEFAULT 0,
+				max_retries INTEGER NOT NULL DEFAULT 3,
+				last_error TEXT,
+				uploaded_at DATETIME,
+				partner_path TEXT
+			)
+		`)
+		if err != nil {
+			return err
+		}
+
+		// Copy existing data, generating a legacy hash for rows without one.
+		_, err = s.db.Exec(`
+			INSERT INTO files_new (id, path, file_hash, original_filename, size, mod_time, status, retry_count, max_retries, last_error, uploaded_at, partner_path)
+			SELECT id, path, COALESCE(file_hash, 'legacy_' || id), COALESCE(original_filename, ''), size, mod_time, status, retry_count, max_retries, last_error, uploaded_at, partner_path FROM files
+		`)
+		if err != nil {
+			return err
+		}
+
+		// Swap tables.
+		_, _ = s.db.Exec("DROP TABLE files")
+		_, err = s.db.Exec("ALTER TABLE files_new RENAME TO files")
+		if err != nil {
+			return err
+		}
+
+		// Recreate indexes.
+		_, _ = s.db.Exec("CREATE INDEX IF NOT EXISTS idx_status_mod_time ON files(status, mod_time);")
+		_, _ = s.db.Exec("CREATE INDEX IF NOT EXISTS idx_partner_path ON files(partner_path);")
+	}
+
 	return nil
 }
 
 // RegisterFile handles the detection of a new file and attempts to pair it.
-func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta bool, expectSidecar bool) error {
+// fileHash is a unique SHA256(content + timestamp) that serves as the DB's unique key.
+// originalFilename is the original base name of the file (used in API requests).
+func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta bool, expectSidecar bool, fileHash string, originalFilename string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -154,10 +221,8 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 		// Single Extension: img.png -> img.json
 		singleExtPartner := strings.TrimSuffix(path, filepath.Ext(path)) + ".json"
 
-		// Check if either partner exists
-		// We prioritize Double Extension if both exist (rare)
-		// We search for both
-		err = tx.QueryRow("SELECT id, status, path FROM files WHERE path = ? OR path = ?", doubleExtPartner, singleExtPartner).Scan(&partnerID, &partnerStatus, &partnerPath)
+		// Check if either partner exists (pick the latest match if multiple).
+		err = tx.QueryRow("SELECT id, status, path FROM files WHERE path = ? OR path = ? ORDER BY id DESC LIMIT 1", doubleExtPartner, singleExtPartner).Scan(&partnerID, &partnerStatus, &partnerPath)
 		if err == nil {
 			foundPartner = true
 		} else if err != sql.ErrNoRows {
@@ -176,16 +241,10 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 		// Single Extension: img.json -> img.png (or img.jpg, etc.)
 		base := strings.TrimSuffix(path, ".json")
 
-		// 1. Try Exact Match (Double Extension Case: base is likely "img.png")
-		// 2. Try Prefix Match (Single Extension Case: base is "img", looking for "img.%")
-		// We use a LIKE query to find the image partner.
-		// Note: We exclude myself (if I happened to be named img.json and img.json.json existed? Unlikely logic loop here but good to keep in mind)
-		// We also want to ensure we find a valid partner (not another json file, but !isMeta checks usually prevent that or app logic).
-		// But here we rely on the fact that images don't end in .json usually.
-
 		// SQLite GLOB or LIKE. LIKE is case insensitive by default in SQLite for ASCII.
 		// We look for path = base OR path LIKE base + ".%"
-		query := `SELECT id, status, path FROM files WHERE path = ? OR path LIKE ? LIMIT 1`
+		// Pick the latest match if multiple.
+		query := `SELECT id, status, path FROM files WHERE path = ? OR path LIKE ? ORDER BY id DESC LIMIT 1`
 		err = tx.QueryRow(query, base, base+".%").Scan(&partnerID, &partnerStatus, &partnerPath)
 		if err == nil {
 			foundPartner = true
@@ -196,6 +255,8 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 		// If not found, we don't know the partner path (could be .png, .jpg).
 		// So we leave partnerPath empty/null.
 	}
+
+	of := sql.NullString{String: originalFilename, Valid: originalFilename != ""}
 
 	if !foundPartner {
 		// Partner not found -> I am waiting.
@@ -215,18 +276,21 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 		}
 
 		query := `
-		INSERT INTO files (path, size, mod_time, status, partner_path)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(path) DO UPDATE SET
+		INSERT INTO files (path, file_hash, original_filename, size, mod_time, status, partner_path, max_retries)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(file_hash) DO UPDATE SET
+			path = excluded.path,
 			size = excluded.size,
 			mod_time = excluded.mod_time,
 			status = ?,
 			partner_path = ?,
+			original_filename = excluded.original_filename,
 			retry_count = 0,
-			last_error = NULL;
+			last_error = NULL,
+			max_retries = ?;
 		`
 		// Reset status and retry state on re-registration
-		_, err = tx.Exec(query, path, size, modTime, initialStatus, pp, initialStatus, pp)
+		_, err = tx.Exec(query, path, fileHash, of, size, modTime, initialStatus, pp, s.defaultMaxRetries, initialStatus, pp, s.defaultMaxRetries)
 		if err != nil {
 			return err
 		}
@@ -238,17 +302,20 @@ func (s *Store) RegisterFile(path string, size int64, modTime time.Time, isMeta 
 
 		// Insert/Update ME
 		queryMe := `
-		INSERT INTO files (path, size, mod_time, status, partner_path)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(path) DO UPDATE SET
+		INSERT INTO files (path, file_hash, original_filename, size, mod_time, status, partner_path, max_retries)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(file_hash) DO UPDATE SET
+			path = excluded.path,
 			size = excluded.size,
 			mod_time = excluded.mod_time,
 			status = ?,
 			partner_path = ?,
+			original_filename = excluded.original_filename,
 			retry_count = 0,
-			last_error = NULL;
+			last_error = NULL,
+			max_retries = ?;
 		`
-		_, err = tx.Exec(queryMe, path, size, modTime, StatusPending, partnerPath, StatusPending, partnerPath)
+		_, err = tx.Exec(queryMe, path, fileHash, of, size, modTime, StatusPending, partnerPath, s.defaultMaxRetries, StatusPending, partnerPath, s.defaultMaxRetries)
 		if err != nil {
 			return err
 		}
@@ -285,7 +352,7 @@ func (s *Store) MarkOrphans(timeout time.Duration) error {
 // AddOrUpdateFile inserts a new file or updates an existing one.
 // Deprecated: Use RegisterFile for pairing logic.
 func (s *Store) AddOrUpdateFile(path string, size int64, modTime time.Time) error {
-	return s.RegisterFile(path, size, modTime, false, true)
+	return s.RegisterFile(path, size, modTime, false, true, "", "")
 }
 
 // MarkUploaded updates the status of a file to UPLOADED and sets the uploaded_at timestamp.
@@ -361,7 +428,7 @@ func (s *Store) ClaimPendingFiles(limit int) ([]FileRecord, error) {
 		ORDER BY mod_time ASC
 		LIMIT ?
 	)
-	RETURNING id, path, size, mod_time, status, retry_count, max_retries, last_error, uploaded_at, partner_path
+	RETURNING id, path, file_hash, original_filename, size, mod_time, status, retry_count, max_retries, last_error, uploaded_at, partner_path
 	`
 	rows, err := tx.Query(query, StatusProcessing, StatusPending, StatusOrphan, limit)
 	if err != nil {
@@ -372,7 +439,7 @@ func (s *Store) ClaimPendingFiles(limit int) ([]FileRecord, error) {
 	var files []FileRecord
 	for rows.Next() {
 		var f FileRecord
-		err := rows.Scan(&f.ID, &f.Path, &f.Size, &f.ModTime, &f.Status, &f.RetryCount, &f.MaxRetries, &f.LastError, &f.UploadedAt, &f.PartnerPath)
+		err := rows.Scan(&f.ID, &f.Path, &f.FileHash, &f.OriginalFilename, &f.Size, &f.ModTime, &f.Status, &f.RetryCount, &f.MaxRetries, &f.LastError, &f.UploadedAt, &f.PartnerPath)
 		if err != nil {
 			return nil, err
 		}
@@ -410,7 +477,7 @@ func (s *Store) ResetStaleProcessingFiles() error {
 // Used by the pruner as a last-resort safety valve when quota is exceeded.
 func (s *Store) GetPendingFilesNoClaim(limit int) ([]FileRecord, error) {
 	query := `
-	SELECT id, path, size, mod_time, status, retry_count, max_retries, last_error, uploaded_at, partner_path
+	SELECT id, path, file_hash, original_filename, size, mod_time, status, retry_count, max_retries, last_error, uploaded_at, partner_path
 	FROM files
 	WHERE status = ?
 	ORDER BY mod_time ASC
@@ -425,7 +492,7 @@ func (s *Store) GetPendingFilesNoClaim(limit int) ([]FileRecord, error) {
 	var files []FileRecord
 	for rows.Next() {
 		var f FileRecord
-		err := rows.Scan(&f.ID, &f.Path, &f.Size, &f.ModTime, &f.Status, &f.RetryCount, &f.MaxRetries, &f.LastError, &f.UploadedAt, &f.PartnerPath)
+		err := rows.Scan(&f.ID, &f.Path, &f.FileHash, &f.OriginalFilename, &f.Size, &f.ModTime, &f.Status, &f.RetryCount, &f.MaxRetries, &f.LastError, &f.UploadedAt, &f.PartnerPath)
 		if err != nil {
 			return nil, err
 		}
@@ -438,7 +505,7 @@ func (s *Store) GetPendingFilesNoClaim(limit int) ([]FileRecord, error) {
 // older than the given cutoff. Ordered by mod_time ASC for oldest-first eviction.
 func (s *Store) GetTTLPruneCandidates(limit int, cutoff time.Time) ([]FileRecord, error) {
 	query := `
-	SELECT id, path, size, mod_time, status, retry_count, max_retries, last_error, uploaded_at, partner_path
+	SELECT id, path, file_hash, original_filename, size, mod_time, status, retry_count, max_retries, last_error, uploaded_at, partner_path
 	FROM files
 	WHERE status IN (?, ?) AND mod_time < ?
 	ORDER BY mod_time ASC
@@ -453,7 +520,7 @@ func (s *Store) GetTTLPruneCandidates(limit int, cutoff time.Time) ([]FileRecord
 	var files []FileRecord
 	for rows.Next() {
 		var f FileRecord
-		err := rows.Scan(&f.ID, &f.Path, &f.Size, &f.ModTime, &f.Status, &f.RetryCount, &f.MaxRetries, &f.LastError, &f.UploadedAt, &f.PartnerPath)
+		err := rows.Scan(&f.ID, &f.Path, &f.FileHash, &f.OriginalFilename, &f.Size, &f.ModTime, &f.Status, &f.RetryCount, &f.MaxRetries, &f.LastError, &f.UploadedAt, &f.PartnerPath)
 		if err != nil {
 			return nil, err
 		}
@@ -484,7 +551,7 @@ func (s *Store) GetTotalSize() (int64, error) {
 // Files are returned in order of Modification Time (oldest first).
 func (s *Store) GetPruneCandidates(limit int) ([]FileRecord, error) {
 	query := `
-	SELECT id, path, size, mod_time, status, retry_count, max_retries, last_error, uploaded_at, partner_path
+	SELECT id, path, file_hash, original_filename, size, mod_time, status, retry_count, max_retries, last_error, uploaded_at, partner_path
 	FROM files
 	WHERE status = ?
 	ORDER BY mod_time ASC
@@ -499,7 +566,7 @@ func (s *Store) GetPruneCandidates(limit int) ([]FileRecord, error) {
 	var candidates []FileRecord
 	for rows.Next() {
 		var f FileRecord
-		err := rows.Scan(&f.ID, &f.Path, &f.Size, &f.ModTime, &f.Status, &f.RetryCount, &f.MaxRetries, &f.LastError, &f.UploadedAt, &f.PartnerPath)
+		err := rows.Scan(&f.ID, &f.Path, &f.FileHash, &f.OriginalFilename, &f.Size, &f.ModTime, &f.Status, &f.RetryCount, &f.MaxRetries, &f.LastError, &f.UploadedAt, &f.PartnerPath)
 		if err != nil {
 			return nil, err
 		}

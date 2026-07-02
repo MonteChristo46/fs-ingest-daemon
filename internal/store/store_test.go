@@ -16,7 +16,7 @@ func TestRemoveFileUnlinksPartner(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	dbPath := filepath.Join(tmpDir, "test.db")
-	s, err := NewStore(dbPath)
+	s, err := NewStore(dbPath, 3)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
@@ -34,12 +34,12 @@ func TestRemoveFileUnlinksPartner(t *testing.T) {
 	size := int64(1024)
 
 	// Register Image (Waiting)
-	if err := s.RegisterFile(imagePath, size, modTime, false, true); err != nil {
+	if err := s.RegisterFile(imagePath, size, modTime, false, true, "testhash_img", "img.png"); err != nil {
 		t.Fatalf("Failed to register image: %v", err)
 	}
 
 	// Register JSON (Pairs them)
-	if err := s.RegisterFile(jsonPath, size, modTime, true, true); err != nil {
+	if err := s.RegisterFile(jsonPath, size, modTime, true, true, "testhash_json", "img.png.json"); err != nil {
 		t.Fatalf("Failed to register json: %v", err)
 	}
 
