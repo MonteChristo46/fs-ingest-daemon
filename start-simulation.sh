@@ -45,14 +45,13 @@ VISA_CONFIGS=(
 )
 
 # Build source/category pairs based on DATASET
-declare -a SOURCE_DIRS
 declare -a CATEGORY_CONFIGS
 
 if [ "$DATASET" == "mvtec" ]; then
-    SOURCE_DIRS=("$MVTEC_SOURCE")
+    SOURCE_DIR="$MVTEC_SOURCE"
     CATEGORY_CONFIGS=("${MVTEC_CONFIGS[@]}")
 elif [ "$DATASET" == "visa" ]; then
-    SOURCE_DIRS=("$VISA_SOURCE")
+    SOURCE_DIR="$VISA_SOURCE"
     CATEGORY_CONFIGS=("${VISA_CONFIGS[@]}")
 elif [ "$DATASET" == "both" ]; then
     # Prepend source directory to each config for disambiguation
@@ -71,7 +70,7 @@ TARGET_DIR="$HOME/glitch-hunt/input"
 DB_PATH="$HOME/glitch-hunt/hunt.db"
 LOG_FILE="./simulation.log"
 
-DEFECT_RATE="0.01"
+DEFECT_RATE="0.02"
 JITTER="0.2"
 NESTED="false"
 
@@ -87,8 +86,6 @@ if [ -n "$1" ]; then
         *)    SINGLE_CONFIG="$SINGLE_CONFIG:1s" ;;
     esac
     CATEGORY_CONFIGS=("$SINGLE_CONFIG")
-else
-    CATEGORY_CONFIGS=("${DEFAULT_CATEGORY_CONFIGS[@]}")
 fi
 
 echo "--- CLEANUP ---"
