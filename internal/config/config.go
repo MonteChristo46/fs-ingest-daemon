@@ -53,8 +53,8 @@ type Config struct {
 
 var (
 	// Default configuration values
-	DefaultEndpoint                  = "https://glitch-hunt-ingestion.my-basement.cloud"
-	DefaultWebClientURL              = "http://glitch-hunt.my-basement.cloud"
+	DefaultEndpoint                  = "https://ingestion.glitch-hunt.com"
+	DefaultWebClientURL              = "https://dashboard.glitch-hunt.com"
 	DefaultMaxDataSizeGB             = 1.0
 	DefaultIngestCheckInterval       = "20ms"
 	DefaultIngestBatchSize           = 10

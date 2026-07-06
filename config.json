@@ -1,6 +1,6 @@
 {
   "device_id": "d6:76:9c:79:a2:fc",
-  "endpoint": "https://glitch-hunt-ingestion.my-basement.cloud",
+  "endpoint": "https://ingestion.glitch-hunt.com",
   "max_data_size_gb": 1,
   "watch_path": "/Users/danielhoschele/Desktop/source-tree/glitch-hunt-monolith/services/fs-ingest-daemon",
   "log_path": "/Users/danielhoschele/Desktop/source-tree/glitch-hunt-monolith/services/fs-ingest-daemon/hunt.log",
@@ -17,7 +17,7 @@
   "orphan_check_interval": "5m",
   "metadata_update_interval": "24h",
   "auth_token": "DziqtHl5HU1x2PTJ4QweeLgDLxtu3iK2nFvHrOfWxdU",
-  "web_client_url": "http://glitch-hunt.my-basement.cloud",
+  "web_client_url": "https://dashboard.glitch-hunt.com",
   "sidecar_strategy": "none",
   "log_max_size_mb": 10,
   "log_max_backups": 1,

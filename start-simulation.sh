@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-DATASET="${DATASET:-both}"
+DATASET="${DATASET:-mvtec}"
 
 # Source directories by dataset
 MVTEC_SOURCE="./test-data/mvtec_anomaly_detection"
@@ -15,16 +15,16 @@ fi
 
 # Category configs by dataset
 MVTEC_CONFIGS=(
-    "wood:3s"
+    "wood:1s"
     #"metal_nut:1s"
-    "bottle:36s"
-    "cable:12s"
-    "capsule:120s"
+    "bottle:5s"
+    "cable:5s"
+    "capsule:5s"
     #"hazelnut:1s"
-    #"zipper:60s"
+    "zipper:20s"
     #"leather:10s"
-    "screw:24s"
-    "tile:30s"
+    "screw:1s"
+    "tile:3s"
     "toothbrush:30s"
     "transistor:60s"
     #"grid:60s"
