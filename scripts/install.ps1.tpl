@@ -4,6 +4,7 @@ $ErrorActionPreference = "Stop"
 $VERSION="{{VERSION}}"
 
 $ESC = [char]27
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 Write-Host "{{BANNER}}" -NoNewline
 Write-Host " $ESC[38;2;200;200;200mDAEMON INSTALLER | v$VERSION$ESC[0m"
