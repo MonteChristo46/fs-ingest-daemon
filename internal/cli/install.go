@@ -224,7 +224,7 @@ func InstallCmd(s service.Service) *cobra.Command {
 			}
 
 			fmt.Println("")
-			fmt.Println("  ✓ Configuration saved")
+			fmt.Printf("  %s Configuration saved\n", util.Emoji("✓", "[OK]"))
 
 			if cfg != nil && cfg.AuthToken == "" {
 				apiClient := api.NewClient(cfg.Endpoint, cfg.APITimeout)
@@ -244,7 +244,7 @@ func InstallCmd(s service.Service) *cobra.Command {
 
 					qrterminal.GenerateHalfBlock(claimURL, qrterminal.L, os.Stdout)
 
-					fmt.Println("\n⌛ Waiting for device to be claimed (Ctrl+C to skip)...")
+					fmt.Printf("\n%s Waiting for device to be claimed (Ctrl+C to skip)...\n", util.Emoji("⌛", "[...]"))
 
 					ticker := time.NewTicker(5 * time.Second)
 					defer ticker.Stop()
@@ -260,7 +260,7 @@ func InstallCmd(s service.Service) *cobra.Command {
 								fmt.Printf("  Still waiting. Open this URL in your browser:\n  %s\n", claimURL)
 							}
 							if polls == 18 {
-								fmt.Println("  ⏱ You can continue waiting or press Ctrl+C to skip pairing.")
+								fmt.Printf("  %s You can continue waiting or press Ctrl+C to skip pairing.\n", util.Emoji("⏱", "[...]"))
 							}
 							statusResp, err := apiClient.CheckPairingStatus(cfg.DeviceID, pairingResp.Code)
 							if err != nil {
@@ -359,14 +359,14 @@ func InstallCmd(s service.Service) *cobra.Command {
 				fmt.Println("Service started successfully!")
 			}
 
-			fmt.Println("\n✓ Installation complete!")
+			fmt.Printf("\n%s Installation complete!\n", util.Emoji("✓", "[OK]"))
 			fmt.Println("")
 			fmt.Println("  Next steps:")
-			fmt.Printf("    📁 Drop files to ingest:  %s\n", cfg.WatchPath)
-			fmt.Printf("    📋 Check status:           hunt status\n")
-			fmt.Printf("    📄 View logs:              sudo hunt logs\n")
-			fmt.Printf("    ⚙  Change watch folder:    sudo hunt watch <path>\n")
-			fmt.Printf("    🛑 Stop daemon:            sudo hunt stop\n")
+			fmt.Printf("    %s Drop files to ingest:  %s\n", util.Emoji("📁", "-"), cfg.WatchPath)
+			fmt.Printf("    %s Check status:           hunt status\n", util.Emoji("📋", "-"))
+			fmt.Printf("    %s View logs:              sudo hunt logs\n", util.Emoji("📄", "-"))
+			fmt.Printf("    %s Change watch folder:    sudo hunt watch <path>\n", util.Emoji("⚙", "*"))
+			fmt.Printf("    %s Stop daemon:            sudo hunt stop\n", util.Emoji("🛑", "-"))
 		},
 	}
 }

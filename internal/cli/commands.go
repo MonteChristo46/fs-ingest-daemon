@@ -25,10 +25,16 @@ func RequireAdmin(cmd *cobra.Command, args []string) {
 
 // NewRootCmd creates the root command and all subcommands for the CLI.
 func NewRootCmd(s service.Service, logger *slog.Logger, cfgPath string, cfg *config.Config) *cobra.Command {
+	cmdLong := "\nFS Ingest Daemon CLI"
+	if util.SupportsEmoji() {
+		cmdLong = assets.Banner() + cmdLong
+	} else {
+		cmdLong = "FS Ingest Daemon CLI v" + assets.Version() + "\n"
+	}
 	var rootCmd = &cobra.Command{
 		Use:     "hunt",
 		Short:   "FS Ingest Daemon CLI",
-		Long:    assets.Banner() + "\nFS Ingest Daemon CLI",
+		Long:    cmdLong,
 		Version: assets.Version(),
 	}
 
